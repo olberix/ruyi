@@ -9,9 +9,9 @@ typedef struct {
     void* (*ruyi_free_func)(size_t, void*);
 
     void* context;
-} ruyi_allocator_t;
+} ruyi_malloc_t;
 
-void ruyi_mem_alloc_init(const ruyi_allocator_t* ma);
+void ruyi_mem_alloc_init(const ruyi_malloc_t* ma);
 
 void* ruyi_mem_alloc(size_t size);
 void* ruyi_mem_realloc(void* ptr, size_t size);

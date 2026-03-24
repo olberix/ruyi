@@ -15,29 +15,31 @@ static inline void* default_free(void* ptr, void* context)
     free(ptr);
 }
 
-static ruyi_allocator_t g_mem_allocator = {
+static ruyi_malloc_t s_mem_allocator = {
     .ruyi_alloc_func = default_alloc,
     .ruyi_realloc_func = default_realloc,
     .ruyi_free_func = default_free,
+    
     .context = NULL
 };
 
-void ruyi_mem_alloc_init(const ruyi_allocator_t *ma)
+void ruyi_mem_alloc_init(const ruyi_malloc_t *ma)
 {
     RUYI_RETURN_IF(ma == NULL);
-    g_mem_allocator = *ma;
+    s_mem_allocator = *ma;
 }
 
-void *ruyi_mem_alloc(size_t size) {
-  return g_mem_allocator.ruyi_alloc_func(size, g_mem_allocator.context);
-}
-
-void *ruyi_mem_realloc(void *ptr, size_t size)
+void* ruyi_mem_alloc(size_t size)
 {
-    return g_mem_allocator.ruyi_realloc_func(ptr, size, g_mem_allocator.context);
+  return s_mem_allocator.ruyi_alloc_func(size, s_mem_allocator.context);
+}
+
+void* ruyi_mem_realloc(void *ptr, size_t size)
+{
+    return s_mem_allocator.ruyi_realloc_func(ptr, size, s_mem_allocator.context);
 }
 
 void ruyi_mem_free(void *ptr)
 {
-    g_mem_allocator.ruyi_free_func(ptr, g_mem_allocator.context);
+    s_mem_allocator.ruyi_free_func(ptr, s_mem_allocator.context);
 }
