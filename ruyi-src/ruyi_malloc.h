@@ -3,13 +3,7 @@
 
 #include <stddef.h>
 
-typedef struct {
-    void* (*ruyi_alloc_func)(size_t, void*);
-    void* (*ruyi_realloc_func)(void*, size_t, void*);
-    void* (*ruyi_free_func)(size_t, void*);
-
-    void* context;
-} ruyi_malloc_t;
+typedef struct ruyi_malloc_t ruyi_malloc_t;
 
 void ruyi_mem_alloc_init(const ruyi_malloc_t* ma);
 

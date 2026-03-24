@@ -1,13 +1,21 @@
 #include "ruyi_malloc.h"
 
+struct ruyi_malloc_t {
+    void* (*ruyi_alloc_func)(size_t, void*);
+    void* (*ruyi_realloc_func)(void*, size_t, void*);
+    void* (*ruyi_free_func)(void*, void*);
+
+    void* context;
+};
+
 static inline void* default_alloc(size_t sz, void* context)
 {
-    malloc(sz);
+    return malloc(sz);
 }
 
 static inline void* default_realloc(void* ptr, size_t sz, void* context)
 {
-    realloc(ptr, sz);
+    return realloc(ptr, sz);
 }
 
 static inline void* default_free(void* ptr, void* context)
