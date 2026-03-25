@@ -53,7 +53,7 @@ static inline void _log_init_()
     strcat(pathname + len, ".info.log");
     s_log_info.fd_info = open(pathname, O_WRONLY | O_APPEND | O_CREAT, 0644);
     RUYI_EXIT_IF(s_log_info.fd_info < 0, "_log_init_(): open %s failed: %s\n", pathname, strerror(errno));
-    strcat(pathname + len, ".error.log");
+    strcpy(pathname + len, ".error.log");
     s_log_info.fd_err = open(pathname, O_WRONLY | O_APPEND | O_CREAT, 0644);
     RUYI_EXIT_IF(s_log_info.fd_err < 0, "_log_init_(): open %s failed: %s\n", pathname, strerror(errno));
 
