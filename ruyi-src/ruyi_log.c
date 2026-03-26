@@ -1,12 +1,18 @@
 #include "ruyi_log.h"
 #include "ruyi_malloc.h"
 #include "ruyi_util.h"
+#include "ruyi_check.h"
 
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <assert.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <stdarg.h>
 
 #if defined(__aarch64__) && defined(__APPLE__)
     #define CACHE_LINE_SIZE 128
@@ -34,16 +40,17 @@ typedef struct {
     int32_t fd_err;
 
     uint32_t drop_num[RUYI_LOGLEVEL_MAX];
+    uint32_t print_num[RUYI_LOGLEVEL_MAX];
+    uint32_t input_num[RUYI_LOGLEVEL_MAX];
     ruyi_log_entry_t log_entry[RUYI_LOGBUFFSIZE];
 } ruyi_log_info_t;
 
 static ruyi_log_info_t s_log_info;
 
-static inline void _log_init_()
+void ruyi_log_init()
 {
     atomic_store_explicit(&s_log_info.head, 0, memory_order_relaxed);
     atomic_store_explicit(&s_log_info.tail, 0, memory_order_relaxed);
-    atomic_store_explicit(&s_log_info.running, true, memory_order_relaxed);
     
     char pathname[256] = "./.ruyi/";
     mkdir(pathname, 0744);
@@ -58,11 +65,15 @@ static inline void _log_init_()
     RUYI_EXIT_IF(s_log_info.fd_err < 0, "_log_init_(): open %s failed: %s\n", pathname, strerror(errno));
 
     memset(s_log_info.drop_num, 0, sizeof(s_log_info.drop_num));
+    memset(s_log_info.print_num, 0, sizeof(s_log_info.print_num));
+    memset(s_log_info.input_num, 0, sizeof(s_log_info.input_num));
     for (uint32_t i = 0; i < RUYI_LOGBUFFSIZE; i++) {
         char* res = ruyi_mem_alloc(RUYI_LOGMSGSIZE);
         RUYI_EXIT_IF(res == NULL, "_log_init_(): memory allocation failed\n");
         s_log_info.log_entry[i].buffer = res;
     }
+
+    atomic_store_explicit(&s_log_info.running, true, memory_order_relaxed);
 }
 
 static inline int32_t _log_getmsg_(int32_t count, char buff[][RUYI_LOGMSGFETCH * (RUYI_LOGMSGSIZE + 1)])
@@ -78,12 +89,14 @@ static inline int32_t _log_getmsg_(int32_t count, char buff[][RUYI_LOGMSGFETCH *
         if (h == t) {
             break;
         }
-        char* wtb = buff[s_log_info.log_entry[t].level];
-        const char* rdb = s_log_info.log_entry[t].buffer;
+        const ruyi_log_entry_t* pe = s_log_info.log_entry + t;
+        char* wtb = buff[pe->level];
+        const char* rdb = pe->buffer;
         memcpy(wtb + strlen(wtb), datefmt, strlen(datefmt));
         strcat(wtb + strlen(wtb), " ");
         memcpy(wtb + strlen(wtb), rdb, strlen(rdb));
         wtb[strlen(wtb)] = '\n';
+        s_log_info.print_num[pe->level]++;
 
         atomic_store_explicit(&s_log_info.tail, (t + 1) & (RUYI_LOGBUFFSIZE - 1), memory_order_release);
     }
@@ -110,10 +123,18 @@ static inline void _log_cleanup_()
     while(_log_writemsg_(RUYI_LOGMSGFETCH) >= RUYI_LOGMSGFETCH) {}
 
     char endstr[1024] = {'\0'};
-    sprintf(endstr, "=============================drop logs: %u=============================\n", s_log_info.drop_num[RUYI_LOGLEVEL_INFO]);
+    sprintf(endstr,
+        "==========================================================input logs: %u\n"
+        "==========================================================print logs: %u\n"
+        "===========================================================drop logs: %u\n",
+        s_log_info.input_num[RUYI_LOGLEVEL_INFO], s_log_info.print_num[RUYI_LOGLEVEL_INFO], s_log_info.drop_num[RUYI_LOGLEVEL_INFO]);
     write(s_log_info.fd_info, endstr, strlen(endstr));
     memset(endstr, 0, sizeof(endstr));
-    sprintf(endstr, "=============================drop logs: %u=============================\n", s_log_info.drop_num[RUYI_LOGLEVEL_ERROR]);
+    sprintf(endstr,
+        "==========================================================input logs: %u\n"
+        "==========================================================print logs: %u\n"
+        "===========================================================drop logs: %u\n",
+        s_log_info.input_num[RUYI_LOGLEVEL_ERROR], s_log_info.print_num[RUYI_LOGLEVEL_ERROR], s_log_info.drop_num[RUYI_LOGLEVEL_ERROR]);
     write(s_log_info.fd_err, endstr, strlen(endstr));
 
     close(s_log_info.fd_err);
@@ -127,8 +148,6 @@ static inline void _log_cleanup_()
 
 void* ruyi_log_event(void* args)
 {
-    _log_init_();
-
     while (atomic_load_explicit(&s_log_info.running, memory_order_relaxed)) {
         int32_t cnt = _log_writemsg_(RUYI_LOGMSGFETCH);
         if(cnt < RUYI_LOGMSGFETCH){
@@ -149,7 +168,7 @@ void ruyi_log_notify_stop()
 
 void ruyi_log_input(RUYI_LOGLEVEL lv, const char *fmt, ...)
 {
-    RUYI_RETURN_IF_MSG(!atomic_load_explicit(&s_log_info.running, memory_order_relaxed), "ruyi_log_input(): log stop\n");
+    RUYI_RETURN_IF_MSG(!atomic_load_explicit(&s_log_info.running, memory_order_relaxed), "ruyi_log_input(): log stopped\n");
     RUYI_RETURN_IF_MSG(lv < RUYI_LOGLEVEL_INFO || lv >= RUYI_LOGLEVEL_MAX || strlen(fmt) == 0, "ruyi_log_input(): params error\n");
 
     char msg[RUYI_LOGMSGSIZE];
@@ -161,6 +180,8 @@ void ruyi_log_input(RUYI_LOGLEVEL lv, const char *fmt, ...)
 
     uint32_t h = atomic_load_explicit(&s_log_info.head, memory_order_relaxed);
     uint32_t t = atomic_load_explicit(&s_log_info.tail, memory_order_acquire);
+
+    s_log_info.input_num[lv]++;
     if (((h + 1) & (RUYI_LOGBUFFSIZE - 1)) == t) {
         s_log_info.drop_num[lv]++;
         return;

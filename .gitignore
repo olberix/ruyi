@@ -1,3 +1,6 @@
 .vscode
 test*
 a.out
+CMakeLists.txt
+build*
+main.c

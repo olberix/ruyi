@@ -1,4 +1,7 @@
 #include "ruyi_malloc.h"
+#include "ruyi_check.h"
+
+#include <stdlib.h>
 
 struct ruyi_malloc_t {
     void* (*ruyi_alloc_func)(size_t, void*);
