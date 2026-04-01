@@ -4,9 +4,9 @@
 /* SPSC mode for network I/O only */
 
 typedef enum {
-    RUYI_LOGLEVEL_INFO = 0,
-    RUYI_LOGLEVEL_ERROR,
-    RUYI_LOGLEVEL_MAX
+	RUYI_LOGLEVEL_INFO = 0,
+	RUYI_LOGLEVEL_ERROR,
+	RUYI_LOGLEVEL_MAX
 } RUYI_LOGLEVEL;
 
 void ruyi_log_init(); /* mt_unsafe */
