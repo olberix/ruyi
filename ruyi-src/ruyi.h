@@ -17,8 +17,6 @@ static ruyi_workers_t s_ruyi_workers;
 
 static inline void ruyi_start()
 {
-    ruyi_mem_alloc_init(NULL);
-
     ruyi_log_init();
     int ret = pthread_create(&s_ruyi_workers.log_thread, NULL, ruyi_log_event, NULL);
     RUYI_EXIT_IF(ret != 0, "ruyi_start(): log thread create failed: %s\n", strerror(ret));

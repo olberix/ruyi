@@ -40,17 +40,23 @@ void ruyi_mem_alloc_init(const ruyi_malloc_t *ma)
     s_mem_allocator = *ma;
 }
 
+void ruyi_mem_alloc_destroy()
+{
+    free(s_mem_allocator.context);
+}
+
 void* ruyi_mem_alloc(size_t size)
 {
   return s_mem_allocator.ruyi_alloc_func(size, s_mem_allocator.context);
 }
 
-void* ruyi_mem_realloc(void *ptr, size_t size)
+void* ruyi_mem_realloc(void* ptr, size_t size)
 {
     return s_mem_allocator.ruyi_realloc_func(ptr, size, s_mem_allocator.context);
 }
 
-void ruyi_mem_free(void *ptr)
+void ruyi_mem_free(void** pptr)
 {
-    s_mem_allocator.ruyi_free_func(ptr, s_mem_allocator.context);
+    s_mem_allocator.ruyi_free_func(*pptr, s_mem_allocator.context);
+    *pptr = NULL;
 }

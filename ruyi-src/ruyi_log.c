@@ -20,7 +20,7 @@
     #define CACHE_LINE_SIZE 64
 #endif
 
-#define RUYI_LOGMSGFETCH (8)
+#define RUYI_LOGMSGFETCH (16)
 #define RUYI_LOGMSGSIZE ((size_t)128)
 #define RUYI_LOGBUFFSIZE ((uint32_t)1 << 16)
 static_assert(RUYI_LOGBUFFSIZE > 1, "RUYI_LOGBUFFSIZE must be greater than 1");
@@ -68,7 +68,7 @@ void ruyi_log_init()
     memset(s_log_info.print_num, 0, sizeof(s_log_info.print_num));
     memset(s_log_info.input_num, 0, sizeof(s_log_info.input_num));
     for (uint32_t i = 0; i < RUYI_LOGBUFFSIZE; i++) {
-        char* res = ruyi_mem_alloc(RUYI_LOGMSGSIZE);
+        char* res = RUYI_MEM_ALLOC(RUYI_LOGMSGSIZE);
         RUYI_EXIT_IF(res == NULL, "_log_init_(): memory allocation failed\n");
         s_log_info.log_entry[i].buffer = res;
     }
@@ -141,8 +141,7 @@ static inline void _log_cleanup_()
     close(s_log_info.fd_info);
 
     for (uint32_t i = 0; i < RUYI_LOGBUFFSIZE; i++) {
-        ruyi_mem_free(s_log_info.log_entry[i].buffer);
-        s_log_info.log_entry[i].buffer = NULL;
+        RUYI_MEM_FREE(&s_log_info.log_entry[i].buffer);
     }
 }
 
@@ -182,7 +181,8 @@ void ruyi_log_input(RUYI_LOGLEVEL lv, const char *fmt, ...)
     uint32_t t = atomic_load_explicit(&s_log_info.tail, memory_order_acquire);
 
     s_log_info.input_num[lv]++;
-    if (((h + 1) & (RUYI_LOGBUFFSIZE - 1)) == t) {
+    uint32_t next = (h + 1) & (RUYI_LOGBUFFSIZE - 1);
+    if (next == t) {
         s_log_info.drop_num[lv]++;
         return;
     }
@@ -191,5 +191,5 @@ void ruyi_log_input(RUYI_LOGLEVEL lv, const char *fmt, ...)
     memcpy(bf, msg, len + 1);
     s_log_info.log_entry[h].level = lv;
 
-    atomic_store_explicit(&s_log_info.head, (h + 1) & (RUYI_LOGBUFFSIZE - 1), memory_order_release);
+    atomic_store_explicit(&s_log_info.head, next, memory_order_release);
 }
