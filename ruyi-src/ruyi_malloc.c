@@ -13,16 +13,19 @@ struct ruyi_malloc_t {
 
 static inline void* default_alloc(size_t sz, void* context)
 {
+	(void)context;
 	return malloc(sz);
 }
 
 static inline void* default_realloc(void* ptr, size_t sz, void* context)
 {
+	(void)context;
 	return realloc(ptr, sz);
 }
 
 static inline void default_free(void* ptr, void* context)
 {
+	(void)context;
 	free(ptr);
 }
 

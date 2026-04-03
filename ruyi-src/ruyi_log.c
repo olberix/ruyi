@@ -140,7 +140,7 @@ static inline void _log_cleanup_()
 	}
 }
 
-void* ruyi_log_event(void* args)
+void* ruyi_log_event()
 {
 	while (atomic_load_explicit(&s_log_info.running, memory_order_relaxed)) {
 		int32_t cnt = _log_writemsg_(RUYI_LOGMSGFETCH);

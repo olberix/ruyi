@@ -4,3 +4,4 @@ a.out
 CMakeLists.txt
 build*
 main.c
+bb.sh

@@ -1,7 +1,7 @@
 #ifndef RUYI_UTIL_H
 #define RUYI_UTIL_H
 
-#define _POSIX_C_SOURCE 200809L
+#define _POSIX_C_SOURCE 200809l
 
 #include <time.h>
 #include <stdint.h>
@@ -15,11 +15,11 @@ static inline struct timespec ruyi_clock_time_ts()
 	return ts;
 }
 
-static inline uint64_t ruyi_clock_time()
+static inline uint64_t ruyi_clock_time_ms()
 {
 	struct timespec ts = ruyi_clock_time_ts();
 
-	return (uint64_t)ts.tv_sec * 1000000000 + ts.tv_nsec;
+	return ((uint64_t)ts.tv_sec * 1000000000 + ts.tv_nsec) / 1000000;
 }
 
 /* Output format: "YYYY-MM-DD HH:MM:SS.mmm" */

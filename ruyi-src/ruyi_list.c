@@ -16,7 +16,7 @@ struct ruyi_list_t {
 
 void default_free_val_func(void** pptr)
 {
-	((void)0);
+	RUYI_MEM_FREE(pptr);
 }
 
 ruyi_list_t* ruyi_list_create(ruyi_list_free_val_func func)
@@ -44,9 +44,11 @@ void ruyi_list_push(ruyi_list_t* list, void* val)
 	node->next = NULL;
 
 	ruyi_lock(&list->lock);
-	list->tail->next = node;
 	if(list->head == NULL) {
 		list->head = node;
+	}
+	else {
+		list->tail->next = node;
 	}
 	list->tail = node;
 	ruyi_unlock(&list->lock);
@@ -80,5 +82,6 @@ void ruyi_list_destroy(ruyi_list_t** plist)
 		node = next;
 	}
 	ruyi_lock_destroy(&list->lock);
-	*plist = NULL;
+	RUYI_MEM_FREE(list);
+	RUYI_MEM_FREE(plist);
 }

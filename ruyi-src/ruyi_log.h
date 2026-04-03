@@ -10,8 +10,7 @@ typedef enum {
 } RUYI_LOGLEVEL;
 
 void ruyi_log_init(); /* mt_unsafe */
-void* ruyi_log_event(void*); /* mt_unsafe */
-
+void* ruyi_log_event(); /* mt_unsafe */
 void ruyi_log_notify_stop(); /* mt_safe */
 
 void ruyi_log_input(RUYI_LOGLEVEL lv, const char* msg, ...); /* mt_unsafe */
