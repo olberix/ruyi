@@ -1,7 +1,7 @@
 #ifndef RUYI_LOG_H
 #define RUYI_LOG_H
 
-/* SPSC mode for network I/O only */
+/* log for network I/O only */
 
 typedef enum {
 	RUYI_LOGLEVEL_INFO = 0,
