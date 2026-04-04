@@ -5,3 +5,4 @@ CMakeLists.txt
 build*
 main.c
 bb.sh
+ruyi_list*

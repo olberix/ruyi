@@ -56,7 +56,7 @@ void ruyi_log_init()
 
 static inline int32_t _log_getmsg_(int32_t count, char _buff[][RUYI_LOGMSGFETCH * (RUYI_LOGMSGSIZE + 1)])
 {
-	char datefmt[32];
+	char datefmt[64];
 	ruyi_clock_time_format(datefmt, sizeof(datefmt), NULL);
 
 	int32_t cnt = -1;

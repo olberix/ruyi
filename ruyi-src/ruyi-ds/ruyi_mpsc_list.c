@@ -7,13 +7,16 @@
 #include <string.h>
 
 typedef struct ruyi_mpsc_list_node_t {
-	void* pval;
 	_Alignas(CACHE_LINE_SIZE) _Atomic struct ruyi_mpsc_list_node_t* next;
+	char padding[CACHE_LINE_SIZE - sizeof(_Atomic struct ruyi_mpsc_list_node_t*)];
+
+	void* pval;
 } ruyi_mpsc_list_node_t;
 
 struct ruyi_mpsc_list_t {
 	_Alignas(CACHE_LINE_SIZE) _Atomic ruyi_mpsc_list_node_t* head;
 	_Alignas(CACHE_LINE_SIZE) _Atomic ruyi_mpsc_list_node_t* tail;
+	char padding[CACHE_LINE_SIZE - sizeof(_Atomic ruyi_mpsc_list_node_t*)];
 
 	size_t sz;
 };
@@ -40,15 +43,12 @@ void ruyi_mpsc_list_push(ruyi_mpsc_list_t* list, void* pval)
 	atomic_store_explicit(&node->next, NULL, memory_order_relaxed);
 
 	while(true) {
-		ruyi_mpsc_list_node_t* t = (ruyi_mpsc_list_node_t*)atomic_load_explicit(&list->tail, memory_order_relaxed);
-		ruyi_mpsc_list_node_t* nt = (ruyi_mpsc_list_node_t*)atomic_load_explicit(&t->next, memory_order_relaxed);
+		ruyi_mpsc_list_node_t* t = (ruyi_mpsc_list_node_t*)atomic_load_explicit(&list->tail, memory_order_acquire);
+		ruyi_mpsc_list_node_t* nt = (ruyi_mpsc_list_node_t*)atomic_load_explicit(&t->next, memory_order_acquire);
 		if(nt == NULL) {
 			if(atomic_compare_exchange_strong_explicit(&t->next, (_Atomic ruyi_mpsc_list_node_t**)&nt, (_Atomic ruyi_mpsc_list_node_t*)node, memory_order_release, memory_order_relaxed)) {
 				break;
 			}
-		}
-		else {
-			atomic_compare_exchange_weak_explicit(&list->tail, (_Atomic ruyi_mpsc_list_node_t**)&t, (_Atomic ruyi_mpsc_list_node_t*)nt, memory_order_relaxed, memory_order_relaxed);
 		}
 	}
 

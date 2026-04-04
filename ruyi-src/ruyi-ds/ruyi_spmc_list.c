@@ -14,6 +14,7 @@ typedef struct ruyi_spmc_list_node_t {
 struct ruyi_spmc_list_t {
 	_Alignas(CACHE_LINE_SIZE) _Atomic ruyi_spmc_list_node_t* head;
 	_Alignas(CACHE_LINE_SIZE) _Atomic ruyi_spmc_list_node_t* tail;
+	char padding[CACHE_LINE_SIZE - sizeof(_Atomic ruyi_spmc_list_node_t*)];
 
 	size_t sz;
 };
