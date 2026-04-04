@@ -12,7 +12,7 @@ typedef struct ruyi_spsc_list_node_t {
 } ruyi_spsc_list_node_t;
 
 struct ruyi_spsc_list_t {
-	_Alignas(CACHE_LINE_SIZE) _Atomic ruyi_spsc_list_node_t* head; /* spsc list can be destroyed by producer or consumer, so head needs atomic */
+	_Alignas(CACHE_LINE_SIZE) _Atomic ruyi_spsc_list_node_t* head;
 	_Alignas(CACHE_LINE_SIZE) _Atomic ruyi_spsc_list_node_t* tail;
 
 	size_t sz;
