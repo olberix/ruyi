@@ -15,8 +15,8 @@ typedef struct ruyi_spmc_list_node_t {
 
 struct ruyi_spmc_list_t {
 	_Alignas(CACHE_LINE_SIZE) _Atomic ruyi_spmc_list_node_t* head;
-	_Alignas(CACHE_LINE_SIZE) _Atomic ruyi_spmc_list_node_t* tail;
 	char padding[CACHE_LINE_SIZE - sizeof(_Atomic ruyi_spmc_list_node_t*)];
+	ruyi_spmc_list_node_t* tail;
 
 	size_t sz;
 };
@@ -28,8 +28,9 @@ ruyi_spmc_list_t *ruyi_spmc_list_create(size_t sz)
 	ruyi_spmc_list_node_t* dummy = RUYI_MEM_ALLOC(sizeof(ruyi_spmc_list_node_t));
 	atomic_store_explicit(&dummy->next, NULL, memory_order_relaxed);
 	atomic_store_explicit(&list->head, (void*)dummy, memory_order_relaxed);
-	atomic_store_explicit(&list->tail, (void*)dummy, memory_order_relaxed);
+	list->tail = dummy;
 
+	atomic_thread_fence(memory_order_release);
 	return list;
 }
 
@@ -38,30 +39,22 @@ void ruyi_spmc_list_push(ruyi_spmc_list_t* list, void* pval)
 	RUYI_RETURN_IF(list == NULL || pval == NULL);
 
 	ruyi_spmc_list_node_t* node = RUYI_MEM_ALLOC(sizeof(ruyi_spmc_list_node_t));
-	node->pval = pval;
+	node->pval = RUYI_MEM_ALLOC(list->sz);
+	memcpy(node->pval, pval, list->sz);
 	atomic_store_explicit(&node->next, NULL, memory_order_relaxed);
 
-	ruyi_spmc_list_node_t* t = (ruyi_spmc_list_node_t*)atomic_load_explicit(&list->tail, memory_order_relaxed);
-	atomic_store_explicit(&t->next, (void*)node, memory_order_relaxed);
-
-	atomic_store_explicit(&list->tail, (void*)node, memory_order_release);
+	ruyi_spmc_list_node_t* t = list->tail;
+	list->tail = node;
+	atomic_store_explicit(&t->next, (void*)node, memory_order_release);
 }
 
 void* ruyi_spmc_list_pop(ruyi_spmc_list_t* list)
 {
-	// RUYI_RETURN_VAL_IF(list == NULL, NULL);
-
-	// ruyi_spmc_list_node_t* h = atomic_load_explicit(&list->head, memory_order_acquire);
-	// ruyi_spmc_list_node_t* nh = atomic_load_explicit(&h->next, memory_order_acquire);
-	// if(nh == NULL) {
-	// 	return NULL;
-	// }
+	RUYI_RETURN_VAL_IF(list == NULL, NULL);
 
 	
 
-	// atomic_store_explicit(&list->head, (void*)nh, memory_order_release);
-
-	// return NULL;
+	return NULL;
 }
 
 void ruyi_spmc_list_destroy(ruyi_spmc_list_t** plist)

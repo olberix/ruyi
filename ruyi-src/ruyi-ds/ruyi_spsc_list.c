@@ -26,9 +26,10 @@ ruyi_spsc_list_t *ruyi_spsc_list_create(size_t sz)
 	list->sz = sz;
 	ruyi_spsc_list_node_t* dummy = RUYI_MEM_ALLOC(sizeof(ruyi_spsc_list_node_t));
 	atomic_store_explicit(&dummy->next, NULL, memory_order_relaxed);
-	atomic_store_explicit(&list->head, (void*)dummy, memory_order_relaxed);
-	atomic_store_explicit(&list->tail, (void*)dummy, memory_order_relaxed);
+	list->head = dummy;
+	list->tail = dummy;
 
+	atomic_thread_fence(memory_order_release);
 	return list;
 }
 
