@@ -19,11 +19,11 @@ static inline void ruyi_start()
 {
 	ruyi_log_init();
 	int ret = pthread_create(&s_ruyi_workers.log_thread, NULL, ruyi_log_event, NULL);
-	RUYI_EXIT_IF(ret != 0, "ruyi_start(): log thread create failed: %s\n", strerror(ret));
+	RUYI_EXIT_IF_MSG(ret != 0, "ruyi_start(): log thread create failed: %s\n", strerror(ret));
 
 	// ruyi_timer_init();
 	// ret = pthread_create(&s_ruyi_workers.timer_thread, NULL, ruyi_timer_event, NULL);
-	// RUYI_EXIT_IF(ret != 0, "ruyi_start(): timer thread create failed: %s\n", strerror(ret));
+	// RUYI_EXIT_IF_MSG(ret != 0, "ruyi_start(): timer thread create failed: %s\n", strerror(ret));
 }
 
 static inline void ruyi_stop()

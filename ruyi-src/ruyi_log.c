@@ -43,10 +43,10 @@ void ruyi_log_init()
 	len = strlen(pathname);
 	strcat(pathname + len, ".info.log");
 	s_log_info.fd_info = open(pathname, O_WRONLY | O_APPEND | O_CREAT, 0644);
-	RUYI_EXIT_IF(s_log_info.fd_info < 0, "_log_init_(): open %s failed: %s\n", pathname, strerror(errno));
+	RUYI_EXIT_IF_MSG(s_log_info.fd_info < 0, "_log_init_(): open %s failed: %s\n", pathname, strerror(errno));
 	strcpy(pathname + len, ".error.log");
 	s_log_info.fd_err = open(pathname, O_WRONLY | O_APPEND | O_CREAT, 0644);
-	RUYI_EXIT_IF(s_log_info.fd_err < 0, "_log_init_(): open %s failed: %s\n", pathname, strerror(errno));
+	RUYI_EXIT_IF_MSG(s_log_info.fd_err < 0, "_log_init_(): open %s failed: %s\n", pathname, strerror(errno));
 
 	s_log_info.msg_list = ruyi_spsc_list_create(sizeof(ruyi_log_msg_t));
 	memset(s_log_info.log_count, 0, sizeof(s_log_info.log_count));

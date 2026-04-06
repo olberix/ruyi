@@ -1,7 +1,9 @@
 #ifndef RUYI_UTIL_H
 #define RUYI_UTIL_H
 
-#define _POSIX_C_SOURCE 200809l
+#ifndef _POSIX_C_SOURCE
+	#define _POSIX_C_SOURCE 200809l
+#endif
 
 #include <time.h>
 #include <stdint.h>

@@ -7,14 +7,15 @@
 #include <string.h>
 
 typedef struct ruyi_spsc_list_node_t {
+	_Atomic struct ruyi_spsc_list_node_t* next;
+	char padding[CACHE_LINE_SIZE - sizeof(_Atomic struct ruyi_spsc_list_node_t*)];
+	
 	void* pval;
-	struct ruyi_spsc_list_node_t* next;
 } ruyi_spsc_list_node_t;
 
 struct ruyi_spsc_list_t {
-	_Alignas(CACHE_LINE_SIZE) _Atomic ruyi_spsc_list_node_t* head;
-	_Alignas(CACHE_LINE_SIZE) _Atomic ruyi_spsc_list_node_t* tail;
-	char padding[CACHE_LINE_SIZE - sizeof(_Atomic struct ruyi_spsc_list_node_t*)];
+	ruyi_spsc_list_node_t* head;
+	ruyi_spsc_list_node_t* tail;
 
 	size_t sz;
 };
@@ -38,24 +39,23 @@ void ruyi_spsc_list_push(ruyi_spsc_list_t* list, void* pval)
 	ruyi_spsc_list_node_t* node = RUYI_MEM_ALLOC(sizeof(ruyi_spsc_list_node_t));
 	node->pval = RUYI_MEM_ALLOC(list->sz);
 	memcpy(node->pval, pval, list->sz);
-	node->next = NULL;
+	atomic_store_explicit(&node->next, NULL, memory_order_relaxed);
 
-	ruyi_spsc_list_node_t* t = (ruyi_spsc_list_node_t*)atomic_load_explicit(&list->tail, memory_order_relaxed);
-	t->next = node;
-	atomic_store_explicit(&list->tail, (void*)node, memory_order_relaxed);
+	ruyi_spsc_list_node_t* t = list->tail;
+	list->tail = node;
+	atomic_store_explicit(&t->next, (void*)node, memory_order_release);
 }
 
 void* ruyi_spsc_list_pop(ruyi_spsc_list_t* list)
 {
 	RUYI_RETURN_VAL_IF(list == NULL, NULL);
 
-	ruyi_spsc_list_node_t* h = (ruyi_spsc_list_node_t*)atomic_load_explicit(&list->head, memory_order_relaxed);
-	ruyi_spsc_list_node_t* node = h->next;
-	RUYI_RETURN_VAL_IF(node == NULL, NULL);
+	ruyi_spsc_list_node_t* nh = (ruyi_spsc_list_node_t*)atomic_load_explicit(&list->head->next, memory_order_relaxed);
+	RUYI_RETURN_VAL_IF(nh == NULL, NULL);
 
-	void* pval = node->pval;
-	atomic_store_explicit(&list->head, (void*)node, memory_order_relaxed);
-	RUYI_MEM_FREE(&h);
+	void* pval = nh->pval;
+	RUYI_MEM_FREE(&list->head);
+	list->head = nh;
 
 	return pval;
 }
@@ -66,8 +66,7 @@ void ruyi_spsc_list_destroy(ruyi_spsc_list_t** plist)
 	ruyi_spsc_list_t* list = *plist;
 	RUYI_RETURN_IF(list == NULL);
 	
-	ruyi_spsc_list_node_t* h = (ruyi_spsc_list_node_t*)atomic_load_explicit(&list->head, memory_order_acquire);
-	ruyi_spsc_list_node_t* next = (ruyi_spsc_list_node_t*)atomic_load_explicit(&h->next, memory_order_acquire);
+	ruyi_spsc_list_node_t* next = (ruyi_spsc_list_node_t*)atomic_load_explicit(&list->head->next, memory_order_acquire);
 	while (next) {
 		ruyi_spsc_list_node_t* tmp = next;
 		next = (ruyi_spsc_list_node_t*)atomic_load_explicit(&next->next, memory_order_acquire);

@@ -33,7 +33,7 @@
 		} \
 	} while (0)
 
-#define RUYI_EXIT_IF(cond, fmt, ...) \
+#define RUYI_EXIT_IF_MSG(cond, fmt, ...) \
 	do {\
 		if (cond) { \
 			fprintf(stderr, "[Ruyi Fatal] " fmt, ##__VA_ARGS__); \

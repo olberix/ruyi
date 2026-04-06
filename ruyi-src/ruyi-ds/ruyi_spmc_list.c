@@ -7,8 +7,10 @@
 #include <string.h>
 
 typedef struct ruyi_spmc_list_node_t {
-	void* pval;
 	_Alignas(CACHE_LINE_SIZE) _Atomic struct ruyi_spmc_list_node_t* next;
+	char padding[CACHE_LINE_SIZE - sizeof(_Atomic struct ruyi_mpsc_list_node_t*)];
+
+	void* pval;
 } ruyi_spmc_list_node_t;
 
 struct ruyi_spmc_list_t {
@@ -35,15 +37,31 @@ void ruyi_spmc_list_push(ruyi_spmc_list_t* list, void* pval)
 {
 	RUYI_RETURN_IF(list == NULL || pval == NULL);
 
+	ruyi_spmc_list_node_t* node = RUYI_MEM_ALLOC(sizeof(ruyi_spmc_list_node_t));
+	node->pval = pval;
+	atomic_store_explicit(&node->next, NULL, memory_order_relaxed);
 
+	ruyi_spmc_list_node_t* t = (ruyi_spmc_list_node_t*)atomic_load_explicit(&list->tail, memory_order_relaxed);
+	atomic_store_explicit(&t->next, (void*)node, memory_order_relaxed);
+
+	atomic_store_explicit(&list->tail, (void*)node, memory_order_release);
 }
 
 void* ruyi_spmc_list_pop(ruyi_spmc_list_t* list)
 {
-	RUYI_RETURN_VAL_IF(list == NULL, NULL);
+	// RUYI_RETURN_VAL_IF(list == NULL, NULL);
 
+	// ruyi_spmc_list_node_t* h = atomic_load_explicit(&list->head, memory_order_acquire);
+	// ruyi_spmc_list_node_t* nh = atomic_load_explicit(&h->next, memory_order_acquire);
+	// if(nh == NULL) {
+	// 	return NULL;
+	// }
 
-	return NULL;
+	
+
+	// atomic_store_explicit(&list->head, (void*)nh, memory_order_release);
+
+	// return NULL;
 }
 
 void ruyi_spmc_list_destroy(ruyi_spmc_list_t** plist)

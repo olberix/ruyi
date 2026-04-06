@@ -14,9 +14,9 @@ typedef struct ruyi_mpsc_list_node_t {
 } ruyi_mpsc_list_node_t;
 
 struct ruyi_mpsc_list_t {
-	_Alignas(CACHE_LINE_SIZE) _Atomic ruyi_mpsc_list_node_t* head;
 	_Alignas(CACHE_LINE_SIZE) _Atomic ruyi_mpsc_list_node_t* tail;
 	char padding[CACHE_LINE_SIZE - sizeof(_Atomic ruyi_mpsc_list_node_t*)];
+	ruyi_mpsc_list_node_t* head;
 
 	size_t sz;
 };
@@ -42,30 +42,20 @@ void ruyi_mpsc_list_push(ruyi_mpsc_list_t* list, void* pval)
 	memcpy(node->pval, pval, list->sz);
 	atomic_store_explicit(&node->next, NULL, memory_order_relaxed);
 
-	while(true) {
-		ruyi_mpsc_list_node_t* t = (ruyi_mpsc_list_node_t*)atomic_load_explicit(&list->tail, memory_order_acquire);
-		ruyi_mpsc_list_node_t* nt = (ruyi_mpsc_list_node_t*)atomic_load_explicit(&t->next, memory_order_acquire);
-		if(nt == NULL) {
-			if(atomic_compare_exchange_strong_explicit(&t->next, (_Atomic ruyi_mpsc_list_node_t**)&nt, (_Atomic ruyi_mpsc_list_node_t*)node, memory_order_release, memory_order_relaxed)) {
-				break;
-			}
-		}
-	}
-
-	atomic_store_explicit(&list->tail, (void*)node, memory_order_relaxed);
+	ruyi_mpsc_list_node_t* ot = (ruyi_mpsc_list_node_t*)atomic_exchange_explicit(&list->tail, (_Atomic ruyi_mpsc_list_node_t*)node, memory_order_release);
+	atomic_store_explicit(&ot->next, (void*)node, memory_order_relaxed);
 }
 
 void* ruyi_mpsc_list_pop(ruyi_mpsc_list_t* list)
 {
 	RUYI_RETURN_VAL_IF(list == NULL, NULL);
 
-	ruyi_mpsc_list_node_t* h = (ruyi_mpsc_list_node_t*)atomic_load_explicit(&list->head, memory_order_relaxed);
-	ruyi_mpsc_list_node_t* node = (ruyi_mpsc_list_node_t*)atomic_load_explicit(&h->next, memory_order_relaxed);
-	RUYI_RETURN_VAL_IF(node == NULL, NULL);
+	ruyi_mpsc_list_node_t* nh = (ruyi_mpsc_list_node_t*)atomic_load_explicit(&list->head->next, memory_order_relaxed);
+	RUYI_RETURN_VAL_IF(nh == NULL, NULL);
 
-	void* pval = node->pval;
-	atomic_store_explicit(&list->head, (void*)node, memory_order_relaxed);
-	RUYI_MEM_FREE(&h);
+	void* pval = nh->pval;
+	RUYI_MEM_FREE(&list->head);
+	list->head = nh;
 
 	return pval;
 }
