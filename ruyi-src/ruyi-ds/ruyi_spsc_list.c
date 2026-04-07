@@ -59,7 +59,7 @@ void* ruyi_spsc_list_pop(ruyi_spsc_list_t* list)
 	RUYI_RETURN_VAL_IF(nh == NULL, NULL);
 
 	void* pval = nh->pval;
-	atomic_store_explicit(&list->head, (_Atomic ruyi_spsc_list_node_t*)nh, memory_order_release);
+	atomic_store_explicit(&list->head, (_Atomic ruyi_spsc_list_node_t*)nh, memory_order_relaxed);
 	RUYI_MEM_FREE(&h);
 
 	return pval;

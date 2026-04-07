@@ -45,7 +45,7 @@ void ruyi_mpsc_list_push(ruyi_mpsc_list_t* list, void* pval)
 	memcpy(node->pval, pval, list->sz);
 	atomic_store_explicit(&node->next, NULL, memory_order_relaxed);
 
-	ruyi_mpsc_list_node_t* ot = (ruyi_mpsc_list_node_t*)atomic_exchange_explicit(&list->tail, (_Atomic ruyi_mpsc_list_node_t*)node, memory_order_release);
+	ruyi_mpsc_list_node_t* ot = (ruyi_mpsc_list_node_t*)atomic_exchange_explicit(&list->tail, (_Atomic ruyi_mpsc_list_node_t*)node, memory_order_relaxed);
 	atomic_store_explicit(&ot->next, (_Atomic ruyi_mpsc_list_node_t*)node, memory_order_release);
 }
 
@@ -58,7 +58,7 @@ void* ruyi_mpsc_list_pop(ruyi_mpsc_list_t* list)
 	RUYI_RETURN_VAL_IF(nh == NULL, NULL);
 
 	void* pval = nh->pval;
-	atomic_store_explicit(&list->head, (_Atomic ruyi_mpsc_list_node_t*)nh, memory_order_release);
+	atomic_store_explicit(&list->head, (_Atomic ruyi_mpsc_list_node_t*)nh, memory_order_relaxed);
 	RUYI_MEM_FREE(&h);
 
 	return pval;

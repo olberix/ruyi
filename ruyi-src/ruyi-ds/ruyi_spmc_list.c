@@ -54,9 +54,9 @@ void* ruyi_spmc_list_pop(ruyi_spmc_list_t* list)
 {
 	RUYI_RETURN_VAL_IF(list == NULL, NULL);
 
-	ruyi_spmc_list_node_t* h = (ruyi_spmc_list_node_t*)atomic_load_explicit(&list->head, memory_order_acquire);
+	ruyi_spmc_list_node_t* h = (ruyi_spmc_list_node_t*)atomic_load_explicit(&list->head, memory_order_relaxed);
 	while (true) {
-		ruyi_spmc_list_node_t* t = (ruyi_spmc_list_node_t*)atomic_load_explicit(&list->tail, memory_order_acquire);
+		ruyi_spmc_list_node_t* t = (ruyi_spmc_list_node_t*)atomic_load_explicit(&list->tail, memory_order_relaxed);
 		if(h == t) {
 			return NULL;
 		}

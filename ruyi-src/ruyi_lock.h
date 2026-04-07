@@ -20,6 +20,7 @@
 
 	typedef struct {
 		_Alignas(CACHE_LINE_SIZE) atomic_flag lock;
+		char padding[CACHE_LINE_SIZE - sizeof(_Alignas(CACHE_LINE_SIZE) atomic_flag)];
 	} ruyi_lock_t;
 
 	static inline void ruyi_lock_init(ruyi_lock_t* lk)
