@@ -1,7 +1,7 @@
 #ifndef RUYI_LOCK_H
 #define RUYI_LOCK_H
 
-#include "ruyi_def.h"
+#include "ruyi_macros.h"
 
 #define RUYI_LOCK_OK 1
 #define RUYI_LOCK_BUSY 2

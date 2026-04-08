@@ -1,7 +1,7 @@
 #include "ruyi_log.h"
 #include "ruyi_malloc.h"
 #include "ruyi_util.h"
-#include "ruyi_check.h"
+#include "ruyi_macros.h"
 #include "ruyi-ds/ruyi_spsc_list.h"
 
 #include <stdatomic.h>
@@ -23,8 +23,10 @@ typedef struct {
 } ruyi_log_msg_t;
 
 typedef struct {
-	ruyi_spsc_list_t* msg_list;
 	_Atomic bool running;
+	char padding[CACHE_LINE_SIZE - sizeof(_Atomic bool)];
+	
+	ruyi_spsc_list_t* msg_list;
 
 	int32_t fd_info;
 	int32_t fd_err;

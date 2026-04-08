@@ -1,6 +1,6 @@
 #include "ruyi_mpsc_list.h"
-#include "ruyi_def.h"
-#include "ruyi_check.h"
+#include "ruyi_macros.h"
+#include "ruyi_malloc.h"
 
 #include <stdatomic.h>
 #include <stdbool.h>
@@ -38,7 +38,7 @@ ruyi_mpsc_list_t *ruyi_mpsc_list_create(size_t sz)
 
 void ruyi_mpsc_list_push(ruyi_mpsc_list_t* list, void* pval)
 {
-	RUYI_RETURN_IF(list == NULL || pval == NULL);
+	RUYI_RETURN_IFUL(list == NULL || pval == NULL);
 
 	ruyi_mpsc_list_node_t* node = RUYI_MEM_ALLOC(sizeof(ruyi_mpsc_list_node_t));
 	node->pval = RUYI_MEM_ALLOC(list->sz);
@@ -51,7 +51,7 @@ void ruyi_mpsc_list_push(ruyi_mpsc_list_t* list, void* pval)
 
 void* ruyi_mpsc_list_pop(ruyi_mpsc_list_t* list)
 {
-	RUYI_RETURN_VAL_IF(list == NULL, NULL);
+	RUYI_RETURN_VAL_IFUL(list == NULL, NULL);
 
 	ruyi_mpsc_list_node_t* h = (ruyi_mpsc_list_node_t*)atomic_load_explicit(&list->head, memory_order_relaxed);
 	ruyi_mpsc_list_node_t* nh = (ruyi_mpsc_list_node_t*)atomic_load_explicit(&h->next, memory_order_relaxed);
@@ -66,9 +66,9 @@ void* ruyi_mpsc_list_pop(ruyi_mpsc_list_t* list)
 
 void ruyi_mpsc_list_destroy(ruyi_mpsc_list_t** plist)
 {
-	RUYI_RETURN_IF(plist == NULL);
+	RUYI_RETURN_IFUL(plist == NULL);
 	ruyi_mpsc_list_t* list = *plist;
-	RUYI_RETURN_IF(list == NULL);
+	RUYI_RETURN_IFUL(list == NULL);
 	
 	ruyi_mpsc_list_node_t* h = (ruyi_mpsc_list_node_t*)atomic_load_explicit(&list->head, memory_order_acquire);
 	ruyi_mpsc_list_node_t* next = (ruyi_mpsc_list_node_t*)atomic_load_explicit(&h->next, memory_order_acquire);

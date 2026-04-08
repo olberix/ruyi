@@ -1,5 +1,5 @@
 #include "ruyi_malloc.h"
-#include "ruyi_check.h"
+#include "ruyi_macros.h"
 
 #include <stdlib.h>
 

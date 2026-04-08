@@ -1,6 +1,6 @@
 #include "ruyi_spmc_list.h"
-#include "ruyi_def.h"
-#include "ruyi_check.h"
+#include "ruyi_macros.h"
+#include "ruyi_malloc.h"
 
 #include <stdatomic.h>
 #include <stdbool.h>
@@ -38,7 +38,7 @@ ruyi_spmc_list_t *ruyi_spmc_list_create(size_t sz)
 
 void ruyi_spmc_list_push(ruyi_spmc_list_t* list, void* pval)
 {
-	RUYI_RETURN_IF(list == NULL || pval == NULL);
+	RUYI_RETURN_IFUL(list == NULL || pval == NULL);
 
 	ruyi_spmc_list_node_t* node = RUYI_MEM_ALLOC(sizeof(ruyi_spmc_list_node_t));
 	atomic_store_explicit(&node->next, NULL, memory_order_relaxed);
@@ -52,18 +52,14 @@ void ruyi_spmc_list_push(ruyi_spmc_list_t* list, void* pval)
 
 void* ruyi_spmc_list_pop(ruyi_spmc_list_t* list)
 {
-	RUYI_RETURN_VAL_IF(list == NULL, NULL);
+	RUYI_RETURN_VAL_IFUL(list == NULL, NULL);
 
 	ruyi_spmc_list_node_t* h = (ruyi_spmc_list_node_t*)atomic_load_explicit(&list->head, memory_order_relaxed);
 	while (true) {
 		ruyi_spmc_list_node_t* t = (ruyi_spmc_list_node_t*)atomic_load_explicit(&list->tail, memory_order_relaxed);
-		if(h == t) {
-			return NULL;
-		}
+		RUYI_RETURN_VAL_IF(h == t, NULL);
 		ruyi_spmc_list_node_t* nh = (ruyi_spmc_list_node_t*)atomic_load_explicit(&h->next, memory_order_relaxed);
-		if (nh == NULL) {
-			return NULL;
-		}
+		RUYI_RETURN_VAL_IF(nh == NULL, NULL);
 		if(atomic_compare_exchange_strong_explicit(&list->head, (_Atomic ruyi_spmc_list_node_t**)&h, (_Atomic ruyi_spmc_list_node_t*)nh, memory_order_relaxed, memory_order_relaxed)) {
 			void* pval = h->pval;
 			RUYI_MEM_FREE(&h);
@@ -74,9 +70,9 @@ void* ruyi_spmc_list_pop(ruyi_spmc_list_t* list)
 
 void ruyi_spmc_list_destroy(ruyi_spmc_list_t** plist)
 {
-	RUYI_RETURN_IF(plist == NULL);
+	RUYI_RETURN_IFUL(plist == NULL);
 	ruyi_spmc_list_t* list = *plist;
-	RUYI_RETURN_IF(list == NULL);
+	RUYI_RETURN_IFUL(list == NULL);
 	
 	ruyi_spmc_list_node_t* h = (ruyi_spmc_list_node_t*)atomic_load_explicit(&list->head, memory_order_acquire);
 	ruyi_spmc_list_node_t* t = (ruyi_spmc_list_node_t*)atomic_load_explicit(&list->tail, memory_order_acquire);

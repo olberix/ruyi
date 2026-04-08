@@ -4,7 +4,7 @@
 #include "ruyi_malloc.h"
 #include "ruyi_log.h"
 #include "ruyi_timer.h"
-#include "ruyi_check.h"
+#include "ruyi_macros.h"
 
 #include <pthread.h>
 
