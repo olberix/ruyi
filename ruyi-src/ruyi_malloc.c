@@ -51,14 +51,14 @@ void ruyi_mem_alloc_destroy()
 void* ruyi_mem_alloc(size_t size)
 {
 	char* ret = s_mem_allocator.ruyi_alloc_func(size, s_mem_allocator.context);
-	RUYI_EXIT_IF_MSG(ret == NULL, "ruyi_mem_alloc: out of memory");
+	RUYI_EXIT_IF_MSG(ret == NULL, "ruyi_mem_alloc(): out of memory");
 	return ret;
 }
 
 void* ruyi_mem_realloc(void* ptr, size_t size)
 {
 	char* ret = s_mem_allocator.ruyi_realloc_func(ptr, size, s_mem_allocator.context);
-	RUYI_EXIT_IF_MSG(ret == NULL, "ruyi_mem_realloc: out of memory");
+	RUYI_EXIT_IF_MSG(ret == NULL, "ruyi_mem_realloc(): out of memory");
 	return ret;
 }
 

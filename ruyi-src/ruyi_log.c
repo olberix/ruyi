@@ -1,6 +1,6 @@
 #include "ruyi_log.h"
 #include "ruyi_malloc.h"
-#include "ruyi_util.h"
+#include "ruyi_clock.h"
 #include "ruyi_macros.h"
 #include "ruyi-ds/ruyi_spsc_list.h"
 
