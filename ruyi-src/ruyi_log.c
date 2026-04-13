@@ -53,7 +53,7 @@ void ruyi_log_init()
 	s_log_info.msg_list = ruyi_spsc_list_create(sizeof(ruyi_log_msg_t));
 	memset(s_log_info.log_count, 0, sizeof(s_log_info.log_count));
 
-	atomic_store_explicit(&s_log_info.running, true, memory_order_relaxed);
+	atomic_store_explicit(&s_log_info.running, true, memory_order_release);
 }
 
 static inline int32_t _log_getmsg_(int32_t count, char _buff[][RUYI_LOGMSGFETCH * (RUYI_LOGMSGSIZE + 1)])
@@ -149,7 +149,7 @@ void ruyi_log_input(RUYI_LOGLEVEL lv, const char *fmt, ...)
 	msg.level = lv;
 	va_list args;
 	va_start(args, fmt);
-	int len = vsnprintf(msg.buffer, sizeof(msg.buffer), fmt, args);
+	int32_t len = vsnprintf(msg.buffer, sizeof(msg.buffer), fmt, args);
 	va_end(args);
 	RUYI_RETURN_IF_MSG(len <= 0, "ruyi_log_input(): vsnprintf error\n");
 

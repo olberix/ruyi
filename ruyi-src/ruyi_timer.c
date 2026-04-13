@@ -7,18 +7,15 @@
 #include <stdbool.h>
 #include <stdatomic.h>
 
-// #define TIMER_ENTRY_HEAP_INIT_SIZE (1 << 20)
-// #define CANCEL_SET_INIT_SIZE (1 << 20)
-
-#define TIMER_ENTRY_HEAP_INIT_SIZE (1 << 0)
-#define CANCEL_SET_INIT_SIZE (1 << 0)
+#define TIMER_ENTRY_HEAP_INIT_SIZE (1 << 20)
+#define CANCEL_SET_INIT_SIZE (1 << 20)
 
 typedef struct {
 	uint64_t ts_ms;
 	uint64_t id;
 	ruyi_timer_callback_t cb;
 	ruyi_timer_userdata_free_t udf;
-	void* args;
+	void* ud;
 } timer_entry_t;
 
 typedef struct {
@@ -68,7 +65,7 @@ static inline void _timer_cleanup_()
 {
 	for (size_t i = 0; i < s_timer_info.teh_len; i++) {
 		timer_entry_t* entry = s_timer_info.timer_entries[i];
-		entry->udf(entry->args);
+		entry->udf(entry->ud);
 		RUYI_MEM_FREE(&entry);
 	}
 	RUYI_MEM_FREE(&s_timer_info.timer_entries);
@@ -227,9 +224,9 @@ void* ruyi_timer_event()
 		do {
 			timer_entry_t* entry = _t_pop_();
 			if (_test_and_erase_(entry->id) == false) {
-				entry->cb(entry->args);
+				entry->cb(entry->ud);
 			}
-			entry->udf(entry->args);
+			entry->udf(entry->ud);
 			RUYI_MEM_FREE(&entry);
 		} while (s_timer_info.teh_len != 0 && s_timer_info.timer_entries[0]->ts_ms <= cur_ts);
 	}
@@ -249,7 +246,7 @@ static inline uint64_t _timer_spawnid_()
 	return atomic_fetch_add(&s_timer_info.next_timerid, 1);
 }
 
-uint64_t ruyi_timer_add(uint64_t delay_ms, ruyi_timer_callback_t cb, void* args, ruyi_timer_userdata_free_t udf)
+uint64_t ruyi_timer_add(uint64_t delay_ms, ruyi_timer_callback_t cb, void* ud, ruyi_timer_userdata_free_t udf)
 {
 	RUYI_RETURN_VAL_IFUL(cb == NULL || udf == NULL || atomic_load_explicit(&s_timer_info.running, memory_order_relaxed) == false, 0);
 
@@ -258,7 +255,7 @@ uint64_t ruyi_timer_add(uint64_t delay_ms, ruyi_timer_callback_t cb, void* args,
 	entry->id = id;
 	entry->ts_ms = delay_ms + ruyi_clock_time_ms();
 	entry->cb = cb;
-	entry->args = args;
+	entry->ud = ud;
 	entry->udf = udf;
 
 	ruyi_mpsc_list_push(s_timer_info.pending_add_list, &entry);
