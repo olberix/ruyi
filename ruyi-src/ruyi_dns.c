@@ -23,11 +23,13 @@ static ruyi_dns_info_t s_dns_info;
 
 void* _ruyi_dns_work_()
 {
-	while (atomic_load_explicit(&s_dns_info.running, memory_order_relaxed)) {
+	while (atomic_load_explicit(&s_dns_info.running, memory_order_seq_cst)) {
 		ruyi_dns_t** dns;
 		ruyi_mutex_lock(&s_dns_info.mlock);
-		while ((dns = ruyi_spsc_list_pop(s_dns_info.dns_list)) == NULL) {
+		if ((dns = ruyi_spsc_list_pop(s_dns_info.dns_list)) == NULL) {
 			ruyi_mutex_wait(&s_dns_info.mlock);
+			ruyi_mutex_unlock(&s_dns_info.mlock);
+			continue;
 		}
 		ruyi_mutex_unlock(&s_dns_info.mlock);
 
@@ -84,7 +86,8 @@ void* ruyi_dns_event()
 
 void ruyi_dns_notify_stop()
 {
-	atomic_store_explicit(&s_dns_info.running, false, memory_order_release);
+	atomic_store_explicit(&s_dns_info.running, false, memory_order_seq_cst);
+	ruyi_mutex_broadcast(&s_dns_info.mlock);
 }
 
 void ruyi_dns_request(ruyi_dns_t* dns)
