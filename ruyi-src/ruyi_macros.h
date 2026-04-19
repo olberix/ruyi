@@ -6,9 +6,9 @@
 #include <stdlib.h>
 
 #if defined(__aarch64__) && defined(__APPLE__)
-	#define CACHE_LINE_SIZE 128
+	#define RUYI_CACHELINE_SIZE 128
 #else
-	#define CACHE_LINE_SIZE 64
+	#define RUYI_CACHELINE_SIZE 64
 #endif
 
 #if defined(__GNUC__) || defined(__clang__)

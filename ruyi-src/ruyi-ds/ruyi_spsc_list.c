@@ -8,15 +8,15 @@
 
 typedef struct ruyi_spsc_list_node_t {
 	_Atomic struct ruyi_spsc_list_node_t* next;
-	char padding[CACHE_LINE_SIZE - sizeof(_Atomic struct ruyi_spsc_list_node_t*)];
+	char padding[RUYI_CACHELINE_SIZE - sizeof(_Atomic struct ruyi_spsc_list_node_t*)];
 	
 	void* pval;
 } ruyi_spsc_list_node_t;
 
 struct ruyi_spsc_list_t {
-	_Alignas(CACHE_LINE_SIZE) _Atomic ruyi_spsc_list_node_t* head;
-	_Alignas(CACHE_LINE_SIZE) _Atomic ruyi_spsc_list_node_t* tail;
-	char padding[CACHE_LINE_SIZE - sizeof(_Atomic ruyi_spsc_list_node_t*)];
+	_Alignas(RUYI_CACHELINE_SIZE) _Atomic ruyi_spsc_list_node_t* head;
+	_Alignas(RUYI_CACHELINE_SIZE) _Atomic ruyi_spsc_list_node_t* tail;
+	char padding[RUYI_CACHELINE_SIZE - sizeof(_Atomic ruyi_spsc_list_node_t*)];
 
 	size_t sz;
 };
@@ -36,7 +36,7 @@ ruyi_spsc_list_t *ruyi_spsc_list_create(size_t sz)
 	return list;
 }
 
-void ruyi_spsc_list_push(ruyi_spsc_list_t* list, void* pval)
+void ruyi_spsc_list_push(ruyi_spsc_list_t* list, const void* pval)
 {
 	RUYI_RETURN_IFUL(list == NULL || pval == NULL);
 
@@ -65,7 +65,7 @@ void* ruyi_spsc_list_pop(ruyi_spsc_list_t* list)
 	return pval;
 }
 
-void ruyi_spsc_list_destroy(ruyi_spsc_list_t** plist)
+void ruyi_spsc_list_destroy(ruyi_spsc_list_t** plist, ruyi_spsc_list_val_free_t free_func)
 {
 	RUYI_RETURN_IFUL(plist == NULL);
 	ruyi_spsc_list_t* list = *plist;
@@ -76,6 +76,9 @@ void ruyi_spsc_list_destroy(ruyi_spsc_list_t** plist)
 	while (next) {
 		ruyi_spsc_list_node_t* tmp = next;
 		next = (ruyi_spsc_list_node_t*)atomic_load_explicit(&next->next, memory_order_acquire);
+		if (free_func) {
+			free_func(tmp->pval);
+		}
 		RUYI_MEM_FREE(&tmp->pval);
 		RUYI_MEM_FREE(&tmp);
 	}

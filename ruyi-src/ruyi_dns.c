@@ -1,5 +1,5 @@
 #include "ruyi_dns.h"
-#include "ruyi_socket.h"
+#include "ruyi_net.h"
 #include "ruyi_macros.h"
 #include "ruyi_malloc.h"
 #include "ruyi-ds/ruyi_spsc_list.h"
@@ -8,11 +8,11 @@
 #include <pthread.h>
 #include <stdatomic.h>
 
-#define DNS_THREAD_COUNT 5
+#define RUYI_DNS_THREAD_COUNT (5)
 
 typedef struct {
-	_Atomic bool running;
-	char padding[CACHE_LINE_SIZE - sizeof(_Atomic bool)];
+	_Alignas(RUYI_CACHELINE_SIZE) _Atomic bool running;
+	char padding[RUYI_CACHELINE_SIZE - sizeof(_Atomic bool)];
 	
 	ruyi_mutexlock_t mlock;
 	pthread_t* threads;
@@ -46,7 +46,7 @@ void* _ruyi_dns_work_()
 		hints.ai_socktype = (*dns)->socktype;
 
 		(*dns)->errcode = getaddrinfo((*dns)->hostname, (*dns)->service, &hints, &(*dns)->ai);
-		ruyi_socket_dns_result(*dns);
+		ruyi_net_dns_result(*dns);
 		RUYI_MEM_FREE(&dns);
 	}
 
@@ -55,26 +55,38 @@ void* _ruyi_dns_work_()
 
 void ruyi_dns_init()
 {
+	memset(&s_dns_info, 0, sizeof(s_dns_info));
+
 	ruyi_mutex_init(&s_dns_info.mlock);
-	s_dns_info.threads = RUYI_MEM_ALLOC(sizeof(pthread_t) * DNS_THREAD_COUNT);
+	s_dns_info.threads = RUYI_MEM_ALLOC(sizeof(pthread_t) * RUYI_DNS_THREAD_COUNT);
 	s_dns_info.dns_list = ruyi_spsc_list_create(sizeof(ruyi_dns_t*));
 	atomic_store_explicit(&s_dns_info.running, true, memory_order_release);
 
-	for(int32_t i = 0; i < DNS_THREAD_COUNT; i++) {
+	for(int32_t i = 0; i < RUYI_DNS_THREAD_COUNT; i++) {
 		int32_t ret = pthread_create(s_dns_info.threads + i, NULL, _ruyi_dns_work_, NULL);
 		RUYI_EXIT_IF_MSG(ret != 0, "ruyi_dns_init(): dns work thread create failed: %s\n", strerror(ret));
 	}
 }
 
+static void _dns_free_(void* pval)
+{
+	ruyi_dns_t* dns = *((ruyi_dns_t**)pval);
+	freeaddrinfo(dns->ai);
+	RUYI_MEM_FREE(&dns);
+}
+
 static inline void _dns_cleanup_()
 {
-	for(int32_t i = 0; i < DNS_THREAD_COUNT; i++) {
+	for(int32_t i = 0; i < RUYI_DNS_THREAD_COUNT; i++) {
 		pthread_join(s_dns_info.threads[i], NULL);
 	}
 	RUYI_MEM_FREE(&s_dns_info.threads);
 
 	ruyi_mutex_destroy(&s_dns_info.mlock);
-	ruyi_spsc_list_destroy(&s_dns_info.dns_list);
+	
+	struct timespec ts = {.tv_sec = 0, .tv_nsec = 300000000}; /* 300ms */
+	nanosleep(&ts, NULL);
+	ruyi_spsc_list_destroy(&s_dns_info.dns_list, _dns_free_);
 }
 
 void* ruyi_dns_event()

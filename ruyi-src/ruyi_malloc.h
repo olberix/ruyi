@@ -3,7 +3,13 @@
 
 #include <stddef.h>
 
-typedef struct ruyi_malloc_t ruyi_malloc_t;
+typedef struct {
+	void* (*ruyi_alloc_func)(size_t, void*);
+	void* (*ruyi_realloc_func)(void*, size_t, void*);
+	void (*ruyi_free_func)(void*, void*);
+
+	void* context;
+} ruyi_malloc_t;
 
 /* invoke this function once during early startup, or omit it entirely. ma->context should be allocated by malloc in Clang */
 void ruyi_mem_alloc_init(const ruyi_malloc_t* ma);

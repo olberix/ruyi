@@ -7,8 +7,8 @@
 #include <stdbool.h>
 #include <stdatomic.h>
 
-#define TIMER_ENTRY_HEAP_INIT_SIZE (1 << 20)
-#define CANCEL_SET_INIT_SIZE (1 << 20)
+#define RUYI_TIMER_ENTRY_HEAP_INIT_SIZE (1 << 20)
+#define RUYI_TIMER_CANCEL_SET_INIT_SIZE (1 << 20)
 
 typedef struct {
 	uint64_t ts_ms;
@@ -24,9 +24,9 @@ typedef struct {
 } cancel_set_t;
 
 typedef struct {
-	_Alignas(CACHE_LINE_SIZE) _Atomic uint64_t next_timerid;
-	_Alignas(CACHE_LINE_SIZE) _Atomic bool running;
-	char padding[CACHE_LINE_SIZE - sizeof(_Atomic bool)];
+	_Alignas(RUYI_CACHELINE_SIZE) _Atomic uint64_t next_timerid;
+	_Alignas(RUYI_CACHELINE_SIZE) _Atomic bool running;
+	char padding[RUYI_CACHELINE_SIZE - sizeof(_Atomic bool)];
 
 	timer_entry_t** timer_entries;
 	cancel_set_t* cancel_set;
@@ -43,14 +43,16 @@ static ruyi_timer_info_t s_timer_info;
 
 void ruyi_timer_init()
 {
+	memset(&s_timer_info, 0, sizeof(s_timer_info));
+
 	atomic_store_explicit(&s_timer_info.next_timerid, 1, memory_order_relaxed);
 	
-	s_timer_info.teh_sz = TIMER_ENTRY_HEAP_INIT_SIZE;
+	s_timer_info.teh_sz = RUYI_TIMER_ENTRY_HEAP_INIT_SIZE;
 	s_timer_info.teh_len = 0;
 	s_timer_info.timer_entries = RUYI_MEM_ALLOC(s_timer_info.teh_sz * sizeof(timer_entry_t*));
 	memset(s_timer_info.timer_entries, 0, s_timer_info.teh_sz * sizeof(timer_entry_t*));
 
-	s_timer_info.cs_sz = CANCEL_SET_INIT_SIZE;
+	s_timer_info.cs_sz = RUYI_TIMER_CANCEL_SET_INIT_SIZE;
 	s_timer_info.cs_len = 0;
 	s_timer_info.cancel_set = RUYI_MEM_ALLOC(s_timer_info.cs_sz * sizeof(cancel_set_t));
 	memset(s_timer_info.cancel_set, 0, s_timer_info.cs_sz * sizeof(cancel_set_t));
@@ -59,6 +61,12 @@ void ruyi_timer_init()
 	s_timer_info.pending_cancel_list = ruyi_mpsc_list_create(sizeof(uint64_t));
 
 	atomic_store_explicit(&s_timer_info.running, true, memory_order_release);
+}
+
+static void _entry_free_(void* pval)
+{
+	timer_entry_t* entry = *((timer_entry_t**)pval);
+	RUYI_MEM_FREE(&entry);
 }
 
 static inline void _timer_cleanup_()
@@ -72,8 +80,10 @@ static inline void _timer_cleanup_()
 
 	RUYI_MEM_FREE(&s_timer_info.cancel_set);
 
-	ruyi_mpsc_list_destroy(&s_timer_info.pending_cancel_list);
-	ruyi_mpsc_list_destroy(&s_timer_info.pending_add_list);
+	struct timespec ts = {.tv_sec = 0, .tv_nsec = 300000000}; /* 300ms */
+	nanosleep(&ts, NULL);
+	ruyi_mpsc_list_destroy(&s_timer_info.pending_cancel_list, _entry_free_);
+	ruyi_mpsc_list_destroy(&s_timer_info.pending_add_list, NULL);
 }
 
 static inline uint64_t _hash_(uint64_t id)
@@ -227,7 +237,7 @@ void* ruyi_timer_event()
 				entry->cb(entry->ud);
 			}
 			entry->udf(entry->ud);
-			RUYI_MEM_FREE(&entry);
+			_entry_free_(&entry);
 		} while (s_timer_info.teh_len != 0 && s_timer_info.timer_entries[0]->ts_ms <= cur_ts);
 	}
 

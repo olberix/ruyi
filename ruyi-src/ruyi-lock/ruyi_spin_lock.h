@@ -22,8 +22,8 @@
 	#endif
 
 	typedef struct {
-		_Alignas(CACHE_LINE_SIZE) atomic_flag spinlock;
-		char padding[CACHE_LINE_SIZE - sizeof(_Alignas(CACHE_LINE_SIZE) atomic_flag)];
+		_Alignas(RUYI_CACHELINE_SIZE) atomic_flag spinlock;
+		char padding[RUYI_CACHELINE_SIZE - sizeof(_Alignas(RUYI_CACHELINE_SIZE) atomic_flag)];
 	} ruyi_spinlock_t;
 
 	static inline void ruyi_spin_init(ruyi_spinlock_t* lk)

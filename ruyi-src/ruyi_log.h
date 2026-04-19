@@ -1,7 +1,7 @@
 #ifndef RUYI_LOG_H
 #define RUYI_LOG_H
 
-/* log for network I/O only */
+/* log for net I/O only */
 
 typedef enum {
 	RUYI_LOGLEVEL_INFO = 0,

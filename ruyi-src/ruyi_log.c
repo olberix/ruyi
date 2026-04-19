@@ -14,17 +14,17 @@
 #include <unistd.h>
 #include <stdarg.h>
 
-#define RUYI_LOGMSGFETCH (16)
-#define RUYI_LOGMSGSIZE ((size_t)126)
+#define RUYI_LOG_MSG_FETCH (16)
+#define RUYI_LOG_MSG_SIZE ((size_t)126)
 
 typedef struct {
 	RUYI_LOGLEVEL level;
-	char buffer[RUYI_LOGMSGSIZE];
+	char buffer[RUYI_LOG_MSG_SIZE];
 } ruyi_log_msg_t;
 
 typedef struct {
-	_Atomic bool running;
-	char padding[CACHE_LINE_SIZE - sizeof(_Atomic bool)];
+	_Alignas(RUYI_CACHELINE_SIZE) _Atomic bool running;
+	char padding[RUYI_CACHELINE_SIZE - sizeof(_Atomic bool)];
 	
 	ruyi_spsc_list_t* msg_list;
 
@@ -38,6 +38,8 @@ static ruyi_log_info_t s_log_info;
 
 void ruyi_log_init()
 {
+	memset(&s_log_info, 0, sizeof(s_log_info));
+
 	char pathname[256] = "./.ruyi/";
 	mkdir(pathname, 0744);
 	int32_t len = strlen(pathname);
@@ -56,7 +58,7 @@ void ruyi_log_init()
 	atomic_store_explicit(&s_log_info.running, true, memory_order_release);
 }
 
-static inline int32_t _log_getmsg_(int32_t count, char _buff[][RUYI_LOGMSGFETCH * (RUYI_LOGMSGSIZE + 1)])
+static inline int32_t _log_getmsg_(int32_t count, char _buff[][RUYI_LOG_MSG_FETCH * (RUYI_LOG_MSG_SIZE + 1)])
 {
 	char datefmt[64];
 	ruyi_clock_time_format(datefmt, sizeof(datefmt), NULL);
@@ -83,7 +85,7 @@ static inline int32_t _log_getmsg_(int32_t count, char _buff[][RUYI_LOGMSGFETCH 
 
 static inline int32_t _log_writemsg_(int32_t count)
 {
-	static char tmp[RUYI_LOGLEVEL_MAX][RUYI_LOGMSGFETCH * (RUYI_LOGMSGSIZE + 1)];
+	static char tmp[RUYI_LOGLEVEL_MAX][RUYI_LOG_MSG_FETCH * (RUYI_LOG_MSG_SIZE + 1)];
 	memset(tmp, 0, sizeof(tmp));
 
 	int32_t cnt = _log_getmsg_(count, tmp);
@@ -97,7 +99,7 @@ static inline int32_t _log_writemsg_(int32_t count)
 
 static inline void _log_cleanup_()
 {
-	while(_log_writemsg_(RUYI_LOGMSGFETCH) >= RUYI_LOGMSGFETCH) {}
+	while(_log_writemsg_(RUYI_LOG_MSG_FETCH) >= RUYI_LOG_MSG_FETCH) {}
 
 	char endstr[1024] = {'\0'};
 	sprintf(endstr,
@@ -117,14 +119,16 @@ static inline void _log_cleanup_()
 	close(s_log_info.fd_err);
 	close(s_log_info.fd_info);
 
-	ruyi_spsc_list_destroy(&s_log_info.msg_list);
+	struct timespec ts = {.tv_sec = 0, .tv_nsec = 300000000}; /* 300ms */
+	nanosleep(&ts, NULL);
+	ruyi_spsc_list_destroy(&s_log_info.msg_list, NULL);
 }
 
 void* ruyi_log_event()
 {
 	while (atomic_load_explicit(&s_log_info.running, memory_order_relaxed)) {
-		int32_t cnt = _log_writemsg_(RUYI_LOGMSGFETCH);
-		if(cnt < RUYI_LOGMSGFETCH){
+		int32_t cnt = _log_writemsg_(RUYI_LOG_MSG_FETCH);
+		if(cnt < RUYI_LOG_MSG_FETCH){
 			static struct timespec ts = {.tv_sec = 0, .tv_nsec = 1000000}; /* 1ms */
 			nanosleep(&ts, NULL);
 		}
@@ -137,12 +141,12 @@ void* ruyi_log_event()
 
 void ruyi_log_notify_stop()
 {
-	atomic_store_explicit(&s_log_info.running, false, memory_order_release);
+	atomic_store_explicit(&s_log_info.running, false, memory_order_relaxed);
 }
 
 void ruyi_log_input(RUYI_LOGLEVEL lv, const char *fmt, ...)
 {
-	RUYI_RETURN_IF_MSG(!atomic_load_explicit(&s_log_info.running, memory_order_acquire), "ruyi_log_input(): log stopped\n");
+	RUYI_RETURN_IF_MSG(!atomic_load_explicit(&s_log_info.running, memory_order_relaxed), "ruyi_log_input(): log stopped\n");
 	RUYI_RETURN_IF_MSG(lv < RUYI_LOGLEVEL_INFO || lv >= RUYI_LOGLEVEL_MAX || strlen(fmt) == 0, "ruyi_log_input(): params error\n");
 
 	ruyi_log_msg_t msg;

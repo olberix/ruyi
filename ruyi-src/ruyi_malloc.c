@@ -3,14 +3,6 @@
 
 #include <stdlib.h>
 
-struct ruyi_malloc_t {
-	void* (*ruyi_alloc_func)(size_t, void*);
-	void* (*ruyi_realloc_func)(void*, size_t, void*);
-	void (*ruyi_free_func)(void*, void*);
-
-	void* context;
-};
-
 static inline void* default_alloc(size_t sz, void* context)
 {
 	(void)context;
