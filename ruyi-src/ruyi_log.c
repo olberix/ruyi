@@ -119,7 +119,7 @@ static inline void _log_cleanup_()
 	close(s_log_info.fd_err);
 	close(s_log_info.fd_info);
 
-	struct timespec ts = {.tv_sec = 0, .tv_nsec = 300000000}; /* 300ms */
+	struct timespec ts = {.tv_sec = 0, .tv_nsec = 500000000}; /* 500ms */
 	nanosleep(&ts, NULL);
 	ruyi_spsc_list_destroy(&s_log_info.msg_list, NULL);
 }

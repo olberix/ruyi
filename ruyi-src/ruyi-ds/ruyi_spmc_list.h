@@ -9,6 +9,6 @@ typedef void (*ruyi_spmc_list_val_free_t)(void*);
 ruyi_spmc_list_t* ruyi_spmc_list_create(size_t); /* mt-safe */
 void ruyi_spmc_list_push(ruyi_spmc_list_t*, const void*); /* mt-unsafe */
 void* ruyi_spmc_list_pop(ruyi_spmc_list_t*); /* mt-safe, users should free return val after used */
-void ruyi_spmc_list_destroy(ruyi_spmc_list_t**, ruyi_spmc_list_val_free_t); /* mt-unsafe, ensure list is not accessed before this function called */
+void ruyi_spmc_list_destroy(ruyi_spmc_list_t**, ruyi_spmc_list_val_free_t); /* mt-unsafe, ensure list is not accessed before this function called, or memory may be leaked */
 
 #endif

@@ -63,9 +63,9 @@ void ruyi_timer_init()
 	atomic_store_explicit(&s_timer_info.running, true, memory_order_release);
 }
 
-static void _entry_free_(void* pval)
+static void _entry_free_(void* pe)
 {
-	timer_entry_t* entry = *((timer_entry_t**)pval);
+	timer_entry_t* entry = *((timer_entry_t**)pe);
 	RUYI_MEM_FREE(&entry);
 }
 
@@ -80,7 +80,7 @@ static inline void _timer_cleanup_()
 
 	RUYI_MEM_FREE(&s_timer_info.cancel_set);
 
-	struct timespec ts = {.tv_sec = 0, .tv_nsec = 300000000}; /* 300ms */
+	struct timespec ts = {.tv_sec = 0, .tv_nsec = 500000000}; /* 500ms */
 	nanosleep(&ts, NULL);
 	ruyi_mpsc_list_destroy(&s_timer_info.pending_cancel_list, _entry_free_);
 	ruyi_mpsc_list_destroy(&s_timer_info.pending_add_list, NULL);

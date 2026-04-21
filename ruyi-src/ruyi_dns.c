@@ -68,10 +68,9 @@ void ruyi_dns_init()
 	}
 }
 
-static void _dns_free_(void* pval)
+static void _dns_free_(void* pd)
 {
-	ruyi_dns_t* dns = *((ruyi_dns_t**)pval);
-	freeaddrinfo(dns->ai);
+	ruyi_dns_t* dns = *((ruyi_dns_t**)pd);
 	RUYI_MEM_FREE(&dns);
 }
 
@@ -84,7 +83,7 @@ static inline void _dns_cleanup_()
 
 	ruyi_mutex_destroy(&s_dns_info.mlock);
 	
-	struct timespec ts = {.tv_sec = 0, .tv_nsec = 300000000}; /* 300ms */
+	struct timespec ts = {.tv_sec = 0, .tv_nsec = 500000000}; /* 500ms */
 	nanosleep(&ts, NULL);
 	ruyi_spsc_list_destroy(&s_dns_info.dns_list, _dns_free_);
 }

@@ -1,5 +1,5 @@
-#ifndef RUYI_ALLOCATOR_H
-#define RUYI_ALLOCATOR_H
+#ifndef RUYI_MALLOC_H
+#define RUYI_MALLOC_H
 
 #include <stddef.h>
 

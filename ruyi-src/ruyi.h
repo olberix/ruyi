@@ -1,7 +1,6 @@
 #ifndef RUYI_H
 #define RUYI_H
 
-#include "ruyi_malloc.h"
 #include "ruyi_macros.h"
 #include "ruyi_log.h"
 #include "ruyi_timer.h"
