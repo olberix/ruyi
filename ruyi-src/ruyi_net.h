@@ -5,13 +5,14 @@
 
 #include <stdint.h>
 #include <netinet/in.h>
+#include <assert.h>
 
 typedef enum RUYI_NET_EVENT_T {
 	RUYI_NET_EVENT_LISTEN = 0,
 	RUYI_NET_EVENT_CONNECT_ACTIVE,
 	RUYI_NET_EVENT_CONNECT_PASSIVE,
-	RUYI_NET_EVENT_READ_CLOSED,
-	RUYI_NET_EVENT_WRITE_CLOSED,
+	RUYI_NET_EVENT_READ_CLOSE,
+	RUYI_NET_EVENT_WRITE_CLOSE,
 	RUYI_NET_EVENT_DNS_RESULT,
 
 	RUYI_NET_EVENT_READ,
@@ -67,11 +68,12 @@ typedef union ruyi_net_data_t {
 } ruyi_net_data_t;
 
 typedef struct ruyi_net_msg_t {
-	RUYI_NET_EVENT_T ev;
-	uint32_t id;
-	ruyi_net_data_t data;
+	_Alignas(32) RUYI_NET_EVENT_T ev;
+	_Alignas(4) uint32_t id;
+	_Alignas(8) ruyi_net_data_t data;
 } ruyi_net_msg_t;
-
+static_assert(sizeof(ruyi_net_msg_t) == 32, "ruyi_net_msg_t size error");
+static_assert(_Alignof(ruyi_net_msg_t) == 32, "ruyi_net_msg_t align error");
 
 void ruyi_net_init(); /* mt-unsafe */
 

@@ -6,9 +6,13 @@
 
 #include <stdbool.h>
 #include <stdatomic.h>
+#include <assert.h>
 
 #define RUYI_TIMER_ENTRY_HEAP_INIT_SIZE (1 << 20)
 #define RUYI_TIMER_CANCEL_SET_INIT_SIZE (1 << 20)
+
+static_assert(RUYI_TIMER_ENTRY_HEAP_INIT_SIZE >= 1, "RUYI_TIMER_ENTRY_HEAP_INIT_SIZE error");
+static_assert(RUYI_TIMER_CANCEL_SET_INIT_SIZE >= 1 && (RUYI_TIMER_CANCEL_SET_INIT_SIZE & (RUYI_TIMER_CANCEL_SET_INIT_SIZE - 1)) == 0, "RUYI_TIMER_CANCEL_SET_INIT_SIZE error");
 
 typedef struct {
 	uint64_t ts_ms;

@@ -13,9 +13,13 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <stdarg.h>
+#include <assert.h>
 
-#define RUYI_LOG_MSG_FETCH (16)
-#define RUYI_LOG_MSG_SIZE ((size_t)126)
+#define RUYI_LOG_MSG_FETCH (8)
+#define RUYI_LOG_MSG_SIZE ((size_t)128)
+
+static_assert(RUYI_LOG_MSG_FETCH >= 1, "RUYI_LOG_MSG_FETCH error");
+static_assert(RUYI_LOG_MSG_SIZE >= 1, "RUYI_LOG_MSG_SIZE error");
 
 typedef struct {
 	RUYI_LOGLEVEL level;
@@ -58,7 +62,7 @@ void ruyi_log_init()
 	atomic_store_explicit(&s_log_info.running, true, memory_order_release);
 }
 
-static inline int32_t _log_getmsg_(int32_t count, char _buff[][RUYI_LOG_MSG_FETCH * (RUYI_LOG_MSG_SIZE + 1)])
+static inline int32_t _log_getmsg_(int32_t count, char _buff[][RUYI_LOG_MSG_FETCH * (RUYI_LOG_MSG_SIZE + 64)])
 {
 	char datefmt[64];
 	ruyi_clock_time_format(datefmt, sizeof(datefmt), NULL);
@@ -85,7 +89,7 @@ static inline int32_t _log_getmsg_(int32_t count, char _buff[][RUYI_LOG_MSG_FETC
 
 static inline int32_t _log_writemsg_(int32_t count)
 {
-	static char tmp[RUYI_LOGLEVEL_MAX][RUYI_LOG_MSG_FETCH * (RUYI_LOG_MSG_SIZE + 1)];
+	static char tmp[RUYI_LOGLEVEL_MAX][RUYI_LOG_MSG_FETCH * (RUYI_LOG_MSG_SIZE + 64)];
 	memset(tmp, 0, sizeof(tmp));
 
 	int32_t cnt = _log_getmsg_(count, tmp);

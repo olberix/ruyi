@@ -7,8 +7,11 @@
 
 #include <pthread.h>
 #include <stdatomic.h>
+#include <assert.h>
 
 #define RUYI_DNS_THREAD_COUNT (5)
+
+static_assert(RUYI_DNS_THREAD_COUNT >= 1, "RUYI_DNS_THREAD_COUNT error");
 
 typedef struct {
 	_Alignas(RUYI_CACHELINE_SIZE) _Atomic bool running;
