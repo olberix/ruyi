@@ -15,9 +15,16 @@ typedef enum RUYI_NET_EVENT_T {
 	RUYI_NET_EVENT_WRITE_CLOSE,
 	RUYI_NET_EVENT_DNS_RESULT,
 
+	RUYI_NET_ID_ERROR,
 	RUYI_NET_EVENT_READ,
 	RUYI_NET_EVENT_WRITE,
 } RUYI_NET_EVENT_T;
+
+typedef enum RUYI_NET_CLOSE_T {
+	RUYI_NET_CLOSE_SERVER = 0,
+	RUYI_NET_CLOSE_CLIENT,
+	RUYI_NET_CLOSE_ERROR,
+} RUYI_NET_CLOSE_T;
 
 typedef struct ruyi_net_read_t {
 	const char* rstr;
@@ -50,7 +57,8 @@ typedef struct ruyi_net_conn_act_t {
 } ruyi_net_conn_act_t;
 
 typedef struct ruyi_net_close_t {
-	bool is_me;
+	RUYI_NET_CLOSE_T type;
+	int32_t errcode;
 } ruyi_net_close_t;
 
 typedef struct ruyi_dns_result_t {

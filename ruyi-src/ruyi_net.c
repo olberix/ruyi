@@ -2,12 +2,15 @@
 #include "ruyi_macros.h"
 #include "ruyi_malloc.h"
 #include "ruyi_poll.h"
+#include "ruyi_log.h"
 #include "ruyi-ds/ruyi_mpsc_list.h"
 #include "ruyi-ds/ruyi_spmc_list.h"
 
 #include <string.h>
 #include <stdatomic.h>
 #include <time.h>
+#include <errno.h>
+#include <unistd.h>
 
 #define RUYI_NET_PACK_MAX_SIZE (64 * 1024)
 #define RUYI_NET_READ_RING_SIZE (1 << 3)
@@ -50,9 +53,11 @@ typedef struct ruyi_conn_t {
 	struct addrinfo* ai_cur;
 	bool passive;
 
+	int32_t errcode;
 	bool readable;
 	bool writable;
-	bool is_pollout_on;
+	bool is_pollout;
+	bool is_pollin;
 
 	uint32_t ring_head;
 	uint32_t ring_tail;
@@ -74,6 +79,8 @@ typedef struct ruyi_net_t {
 
 	uint32_t conns_gc_idx;
 	ruyi_conn_t conns[RUYI_NET_MAX_SOCKETS];
+
+	int32_t poll_fd;
 } ruyi_net_t;
 
 static ruyi_net_t s_net_info;
@@ -89,6 +96,9 @@ void ruyi_net_init()
 		s_net_info.slot_pool[i] = i + 1;
 	}
 	s_net_info.sp_top = RUYI_NET_MAX_SOCKETS;
+
+	s_net_info.poll_fd = ruyi_poll_create();
+	RUYI_EXIT_IF_MSG(s_net_info.poll_fd < 0, "ruyi_net_init(): poll create failed: %s\n", strerror(errno));
 
 	atomic_store_explicit(&s_net_info.running, true, memory_order_release);
 }
@@ -133,20 +143,18 @@ static inline void _clear_conn_(ruyi_conn_t* c)
 	if (c->service != NULL) {
 		RUYI_MEM_FREE(&c->service);
 	}
-	if (c->readable) {
-		shutdown(c->fd, SHUT_RD);
-		c->readable = false;
-	}
-	if (c->writable || c->write_list_head != NULL) {
-		shutdown(c->fd, SHUT_WR);
-		c->writable = false;
-	}
+
+	close(c->fd);
 	while (c->write_list_head != NULL) {
 		write_node_t* tmp = c->write_list_head;
 		c->write_list_head = tmp->next;
 		tmp->free_func(tmp->wstr);
 		RUYI_MEM_FREE(&tmp);
 	}
+	if (c->is_pollout || c->is_pollin) {
+		ruyi_poll_del(s_net_info.poll_fd, c->fd);
+	}
+
 	for (uint32_t j = 0; j < RUYI_NET_READ_RING_SIZE; j++) {
 		read_node_t* rn = c->read_ring + j;
 		while (atomic_load_explicit(&rn->ref, memory_order_relaxed) != 0) {
@@ -171,10 +179,27 @@ static inline void _net_cleanup_()
 		_clear_conn_(s_net_info.conns + idx);
 	}
 
+	ruyi_poll_close(s_net_info.poll_fd);
+
 	struct timespec ts = {.tv_sec = 0, .tv_nsec = 500000000}; /* 500ms */
 	nanosleep(&ts, NULL);
 	ruyi_mpsc_list_destroy(&s_net_info.input_event_list, _input_free_);
 	ruyi_spmc_list_destroy(&s_net_info.output_event_list, _output_free_);
+}
+
+static inline void _report_error_(ruyi_conn_t* c, int32_t errcode)
+{
+	c->errcode = errcode;
+
+	ruyi_net_msg_t msg;
+	msg.ev = RUYI_NET_EVENT_READ_CLOSE;
+	msg.id = c->id;
+	msg.data.close.type = RUYI_NET_CLOSE_ERROR;
+	msg.data.close.errcode = c->errcode;
+	ruyi_spmc_list_push(s_net_info.output_event_list, &msg);
+
+	msg.ev = RUYI_NET_EVENT_WRITE_CLOSE;
+	ruyi_spmc_list_push(s_net_info.output_event_list, &msg);
 }
 
 static inline void _conn_gc_()
@@ -183,7 +208,9 @@ static inline void _conn_gc_()
 	s_net_info.conns_gc_idx = (s_net_info.conns_gc_idx + 1) & RUYI_NET_MAX_SOCKETS;
 	RUYI_RETURN_IF(_is_cleared_(c));
 	
-	RUYI_RETURN_IF(c->readable == true || c->writable == true || c->write_list_head != NULL);
+	if (c->errcode == 0) {
+		RUYI_RETURN_IF(c->readable || c->writable || c->write_list_head != NULL);
+	}
 	for (uint32_t j = 0; j < RUYI_NET_READ_RING_SIZE; j++) {
 		RUYI_RETURN_IF(atomic_load_explicit(&c->read_ring[j].ref, memory_order_relaxed) != 0);
 	}
@@ -208,24 +235,106 @@ static inline ruyi_conn_t* _spawn_conn_()
 	return c;
 }
 
-static inline void _process_event_read_close_(ruyi_net_msg_t* msg)
+static inline void _polling_strategy_(ruyi_conn_t* c)
 {
+	if (ruyi_unlikely(c->errcode != 0)) {
+		if (c->is_pollin == true || c->is_pollout == true) {
+			ruyi_poll_del(s_net_info.poll_fd, c->fd);
+			c->is_pollin = false;
+			c->is_pollout = false;
+		}
+		return;
+	}
 
+	bool r = c->readable;
+	bool w = c->write_list_head != NULL;
+	if (!r && !w) {
+		if (c->is_pollin || c->is_pollout) {
+			if (ruyi_unlikely(ruyi_poll_del(s_net_info.poll_fd, c->fd) < 0)) {
+				_report_error_(c, errno);
+				RUYI_LOG_ERROR("delete id(%u) from polling error: %s", c->id, strerror(c->errcode));
+			}
+			else {
+				c->is_pollin = false;
+				c->is_pollout = false;
+			}
+		}
+	}
+	else {
+		if (c->is_pollin != r || c->is_pollout != w) {
+			if (ruyi_unlikely(ruyi_poll_ctl(s_net_info.poll_fd, c->fd, c, r, w) < 0)) {
+				_report_error_(c, errno);
+				RUYI_LOG_ERROR("control id(%u) from polling error: %s", c->id, strerror(c->errcode));
+			}
+			else {
+				c->is_pollin = r;
+				c->is_pollout = w;
+			}
+		}
+	}
+}
+
+static inline void _process_event_read_close_(ruyi_conn_t* c, ruyi_net_msg_t* msg)
+{
+	(void)msg;
+	RUYI_RETURN_IFUL(c->readable == false);
+
+	shutdown(c->fd, SHUT_RD);
+	c->readable = false;
+	_polling_strategy_(c);
+
+	ruyi_net_msg_t m;
+	m.ev = RUYI_NET_EVENT_READ_CLOSE;
+	m.id = c->id;
+	m.data.close.type = RUYI_NET_CLOSE_SERVER;
+	ruyi_spmc_list_push(s_net_info.output_event_list, &m);
+}
+
+static inline void _process_event_write_close_(ruyi_conn_t* c, ruyi_net_msg_t* msg)
+{
+	(void)msg;
+	RUYI_RETURN_IFUL(c->writable == false);
+
+	if (c->write_list_head == NULL) {
+		shutdown(c->fd, SHUT_WR);
+	}
+	c->writable = false;
+	_polling_strategy_(c);
+
+	ruyi_net_msg_t m;
+	m.ev = RUYI_NET_EVENT_WRITE_CLOSE;
+	m.id = c->id;
+	m.data.close.type = RUYI_NET_CLOSE_SERVER;
+	ruyi_spmc_list_push(s_net_info.output_event_list, &m);
 }
 
 static inline int32_t _do_pending_events_()
 {
+	int32_t num = 0;
 	ruyi_net_msg_t* msg = NULL;
 	while ((msg = ruyi_mpsc_list_pop(s_net_info.input_event_list)) != NULL) {
+		num++;
+		ruyi_conn_t* c = _get_conn_(msg->id);
+		if (ruyi_unlikely(c->id != msg->id)) {
+			RUYI_LOG_ERROR("id on slot is %s, but received %s", c->id, msg->id);
+			RUYI_MEM_FREE(&msg);
+			continue;
+		}
+		if (ruyi_unlikely(c->errcode != 0)) {
+			RUYI_LOG_ERROR("the socket for id(%u) has already encountered an error: %s", c->id, strerror(c->errcode));
+			RUYI_MEM_FREE(&msg);
+			continue;
+		}
 		switch (msg->ev) {
 			case RUYI_NET_EVENT_DNS_RESULT:
 				/* code */
 				break;
 			case RUYI_NET_EVENT_READ_CLOSE:
-				_process_event_read_close_(msg);
+				_process_event_read_close_(c, msg);
 				break;
 			case RUYI_NET_EVENT_WRITE_CLOSE:
-
+				_process_event_write_close_(c, msg);
+				break;
 			case RUYI_NET_EVENT_WRITE:
 
 			default:
@@ -234,11 +343,13 @@ static inline int32_t _do_pending_events_()
 
 		RUYI_MEM_FREE(&msg);
 	}
+
+	return num;
 }
 
 static inline int32_t _do_polling_events_()
 {
-
+	return 0;
 }
 
 void* ruyi_net_event()
@@ -317,7 +428,7 @@ void ruyi_net_connect(const char* hostname, const char* service, int32_t protoco
 
 void ruyi_net_dns_result(ruyi_dns_t* dns)
 {
-	RUYI_RETURN_IF_MSG(dns == NULL, "ruyi_net_dns_result(): dns error\n");
+	RUYI_RETURN_IF_MSG(dns == NULL, "ruyi_net_dns_result(): params error\n");
 
 	ruyi_net_msg_t msg;
 	msg.ev = RUYI_NET_EVENT_DNS_RESULT;
@@ -328,7 +439,7 @@ void ruyi_net_dns_result(ruyi_dns_t* dns)
 
 void ruyi_net_write(uint32_t id, char* str, size_t len, write_str_free_t free_func)
 {
-	RUYI_RETURN_IF_MSG(str == NULL || free_func == NULL || id > RUYI_NET_MAX_SOCKETS, "ruyi_net_write(): params error\n");
+	RUYI_RETURN_IF_MSG(str == NULL || free_func == NULL, "ruyi_net_write(): params error\n");
 
 	ruyi_net_msg_t msg;
 	msg.ev = RUYI_NET_EVENT_WRITE;
@@ -342,11 +453,11 @@ void ruyi_net_write(uint32_t id, char* str, size_t len, write_str_free_t free_fu
 
 void ruyi_net_close(uint32_t id, int32_t how)
 {
-	RUYI_RETURN_IF_MSG(how == SHUT_RD || how == SHUT_WR || how == SHUT_RDWR || id > RUYI_NET_MAX_SOCKETS, "ruyi_net_close(): params error\n");
+	RUYI_RETURN_IF_MSG(how == SHUT_RD || how == SHUT_WR || how == SHUT_RDWR, "ruyi_net_close(): params error\n");
 
 	ruyi_net_msg_t msg;
 	msg.id = id;
-	msg.data.close.is_me = true;
+	msg.data.close.type = RUYI_NET_CLOSE_SERVER;
 	if (how == SHUT_RD) {
 		msg.ev = RUYI_NET_EVENT_READ_CLOSE;
 		ruyi_mpsc_list_push(s_net_info.input_event_list, &msg);

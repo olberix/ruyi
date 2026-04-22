@@ -1,6 +1,7 @@
 #include "ruyi_poll.h"
 
 #include <stddef.h>
+#include <unistd.h>
 
 #ifdef __linux__
 
