@@ -15,27 +15,22 @@
 		return close(pfd);
 	}
 
-	int32_t ruyi_poll_add(int32_t pfd, int32_t sfd, void* ud)
+	int32_t ruyi_poll_ctl(int32_t pfd, int32_t sfd, void* ud, bool readable, bool writable, bool polling)
 	{
-		ruyi_poll_event_t ev;
-		ev.events = EPOLLIN;
-		ev.data.ptr = ud;
-
-		return epoll_ctl(pfd, EPOLL_CTL_ADD, sfd, &ev);
-	}
-
-	int32_t ruyi_poll_del(int32_t pfd, int32_t sfd)
-	{
-		return epoll_ctl(pfd, EPOLL_CTL_DEL, sfd , NULL);
-	}
-
-	int32_t ruyi_poll_ctl(int32_t pfd, int32_t sfd, void* ud, bool readable, bool writable)
-	{
-		ruyi_poll_event_t ev;
-		ev.events = (readable ? EPOLLIN : 0) | (writable ? EPOLLOUT : 0);
-		ev.data.ptr = ud;
-
-		return epoll_ctl(pfd, EPOLL_CTL_ADD, sfd, &ev);
+		if (readable == false && writable == false) {
+			return polling ? epoll_ctl(pfd, EPOLL_CTL_DEL, sfd , NULL) : 0;
+		}
+		else {
+			ruyi_poll_event_t ev;
+			ev.events = (readable ? EPOLLIN : 0) | (writable ? EPOLLOUT : 0) | EPOLLHUP | EPOLLERR;
+			ev.data.ptr = ud;
+			if (polling) {
+				return epoll_ctl(pfd, EPOLL_CTL_MOD, sfd, &ev);
+			}
+			else {
+				return epoll_ctl(pfd, EPOLL_CTL_ADD, sfd, &ev);
+			}
+		}
 	}
 
 	int32_t ruyi_poll_wait(int32_t pfd, ruyi_poll_event_t* ev, int32_t count)

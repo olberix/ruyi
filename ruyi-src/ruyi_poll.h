@@ -13,11 +13,8 @@
 #endif
 
 int32_t ruyi_poll_create();
-int32_t ruyi_poll_close(int32_t pfd);
-
-int32_t ruyi_poll_add(int32_t pfd, int32_t sfd, void* ud);
-int32_t ruyi_poll_del(int32_t pfd, int32_t sfd);
-int32_t ruyi_poll_ctl(int32_t pfd, int32_t sfd, void*, bool readable, bool writable);
+int32_t ruyi_poll_close(int32_t);
+int32_t ruyi_poll_ctl(int32_t, int32_t , void*, bool, bool, bool);
 
 int32_t ruyi_poll_wait(int32_t, ruyi_poll_event_t*, int);
 bool ruyi_poll_event_readable(const ruyi_poll_event_t*);

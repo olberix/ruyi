@@ -11,13 +11,14 @@ typedef enum RUYI_NET_EVENT_T {
 	RUYI_NET_EVENT_LISTEN = 0,
 	RUYI_NET_EVENT_CONNECT_ACTIVE,
 	RUYI_NET_EVENT_CONNECT_PASSIVE,
-	RUYI_NET_EVENT_READ_CLOSE,
-	RUYI_NET_EVENT_WRITE_CLOSE,
-	RUYI_NET_EVENT_DNS_RESULT,
-
-	RUYI_NET_ID_ERROR,
+	RUYI_NET_EVENT_READ_SHUTDOWN,
+	RUYI_NET_EVENT_WRITE_SHUTDOWN,
+	RUYI_NET_EVENT_CLOSE,
+	RUYI_NET_EVENT_ID_ERROR,
 	RUYI_NET_EVENT_READ,
+	
 	RUYI_NET_EVENT_WRITE,
+	RUYI_NET_EVENT_DNS_RESULT,
 } RUYI_NET_EVENT_T;
 
 typedef enum RUYI_NET_CLOSE_T {
@@ -30,12 +31,11 @@ typedef struct ruyi_net_read_t {
 	const char* rstr;
 	const struct read_node_t* rn;
 	uint32_t len;
-	uint32_t id; /* from which listen fd */
 } ruyi_net_read_t;
 
 typedef void (*write_str_free_t)(void*);
 typedef struct ruyi_net_write_t {
-	const char* wstr;
+	char* wstr;
 	uint32_t len;
 	write_str_free_t free_func;
 } ruyi_net_write_t;
@@ -43,17 +43,18 @@ typedef struct ruyi_net_write_t {
 typedef struct ruyi_net_listen_t {
 	const char* hostname;
 	const char* service;
-	const struct sockaddr_storage* ai;
+	const struct sockaddr_storage* addr;
 } ruyi_net_listen_t;
 
 typedef struct ruyi_net_conn_psv_t {
-	const struct sockaddr_storage* ai;
+	uint32_t listen_id;
+	const struct sockaddr_storage* addr;
 } ruyi_net_conn_psv_t;
 
 typedef struct ruyi_net_conn_act_t {
 	const char* hostname;
 	const char* service;
-	const struct sockaddr_storage* ai;
+	const struct sockaddr_storage* addr;
 } ruyi_net_conn_act_t;
 
 typedef struct ruyi_net_close_t {
@@ -85,14 +86,17 @@ static_assert(_Alignof(ruyi_net_msg_t) == 32, "ruyi_net_msg_t align error");
 
 void ruyi_net_init(); /* mt-unsafe */
 
+//input
 void ruyi_net_listen(const char*, const char*, int32_t); /* mt-safe */
 void ruyi_net_connect(const char*, const char*, int32_t); /* mt-safe */
-void ruyi_net_write(uint32_t, char*, size_t, write_str_free_t); /* mt-safe */
+void ruyi_net_send(uint32_t, char*, size_t, write_str_free_t); /* mt-safe */
 void ruyi_net_close(uint32_t, int32_t); /* mt-safe */
 void ruyi_net_dns_result(ruyi_dns_t*); /* mt-safe */
+//output
+ruyi_net_msg_t* ruyi_net_get_msg(); /* mt-safe */
+void ruyi_net_destroy_msg(ruyi_net_msg_t**); /* mt-safe */
 
 void* ruyi_net_event(); /* mt-unsafe */
 void ruyi_net_notify_stop(); /* mt_safe */
-
 
 #endif

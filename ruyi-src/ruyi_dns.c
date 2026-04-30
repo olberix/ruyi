@@ -113,3 +113,41 @@ void ruyi_dns_request(ruyi_dns_t* dns)
 	ruyi_mutex_signal(&s_dns_info.mlock);
 	ruyi_mutex_unlock(&s_dns_info.mlock);
 }
+
+ruyi_dns_t* ruyi_dns_new(const char* hostname, const char* service, int32_t protocol, bool passive)
+{
+	char* h = NULL;
+	if (hostname != NULL) {
+		size_t sz = strlen(hostname) + 1;
+		h = RUYI_MEM_ALLOC(sz);
+		memcpy(h, hostname, sz);
+	}
+	size_t sz = strlen(service) + 1;
+	char* s = RUYI_MEM_ALLOC(sz);
+	memcpy(s, service, sz);
+
+	ruyi_dns_t* dns = RUYI_MEM_ALLOC(sizeof(ruyi_dns_t));
+	dns->hostname = h;
+	dns->service = s;
+	dns->ai = NULL;
+	dns->protocol = protocol;
+	dns->socktype = protocol == IPPROTO_TCP ? SOCK_STREAM : SOCK_DGRAM;
+	dns->errcode = 0;
+	dns->passive = passive;
+
+	return dns;
+}
+
+void ruyi_dns_destroy(ruyi_dns_t* dns)
+{
+	if (dns->hostname) {
+		RUYI_MEM_FREE(&dns->hostname);
+	}
+	if (dns->service) {
+		RUYI_MEM_FREE(&dns->service);
+	}
+	if (dns->ai) {
+		freeaddrinfo(dns->ai);
+	}
+	RUYI_MEM_FREE(&dns);
+}
