@@ -95,10 +95,14 @@ static inline int32_t _log_writemsg_(int32_t count)
 	int32_t cnt = _log_getmsg_(count, tmp);
 	ssize_t len = strlen(tmp[RUYI_LOGLEVEL_INFO]);
 	RUYI_MSG_IF(write(s_log_info.fd_info, tmp[RUYI_LOGLEVEL_INFO], len) != len, "_log_writemsg_(): write INFO didn't execute as expected\n");
-	fprintf(stdout, "[Info] %s", tmp[RUYI_LOGLEVEL_INFO]);
+	if (len > 0) {
+		fprintf(stdout, "%s", tmp[RUYI_LOGLEVEL_INFO]);
+	}
 	len = strlen(tmp[RUYI_LOGLEVEL_ERROR]);
 	RUYI_MSG_IF(write(s_log_info.fd_err, tmp[RUYI_LOGLEVEL_ERROR], len) != len, "_log_writemsg_(): write ERROR didn't execute as expected\n");
-	fprintf(stdout, "[Error] %s", tmp[RUYI_LOGLEVEL_ERROR]);
+	if (len > 0) {
+		fprintf(stderr, "\033[31m%s\033[0m", tmp[RUYI_LOGLEVEL_ERROR]);
+	}
 
 	return cnt;
 }

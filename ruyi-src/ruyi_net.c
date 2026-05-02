@@ -256,6 +256,10 @@ void ruyi_net_init()
 static void _input_free_(void* pi)
 {
 	ruyi_net_msg_t* m = pi;
+	if (m == NULL) {
+		return;
+	}
+
 	if (m->ev == RUYI_NET_EVENT_DNS_RESULT) {
 		RUYI_MEM_FREE(&m->data.dns_result.dns->hostname);
 		RUYI_MEM_FREE(&m->data.dns_result.dns->service);
@@ -268,6 +272,10 @@ static void _input_free_(void* pi)
 static void _output_free_(void* po)
 {
 	ruyi_net_msg_t* m = po;
+	if (m == NULL) {
+		return;
+	}
+
 	if (m->ev == RUYI_NET_EVENT_READ) {
 		read_node_t* rn = (read_node_t*)m->data.read.rn;
 		atomic_fetch_sub_explicit(&rn->ref, 1, memory_order_relaxed);
@@ -313,31 +321,35 @@ static inline void _send_close_(ruyi_conn_t* c, int32_t what, RUYI_NET_CLOSE_T w
 	}
 
 	if (what == SHUT_RD) {
-		ruyi_net_msg_t m;
-		m.ev = RUYI_NET_EVENT_READ_SHUTDOWN;
-		m.id = c->id;
-		m.data.close.type = who;
-		ruyi_spmc_list_push(s_net_info.output_event_list, &m);
-		RUYI_LOG_INFO("<hostname:%s, service:%s, id:%u, type:%s> read shutdown by %s", _get_hostname_(c), c->service, c->id, _get_conntype_(c), who == RUYI_NET_CLOSE_SERVER ? "server" : "client");
-
-		if (c->writable == false) {
-			m.ev = RUYI_NET_EVENT_CLOSE;
+		if (c->readable) {
+			ruyi_net_msg_t m;
+			m.ev = RUYI_NET_EVENT_READ_SHUTDOWN;
+			m.id = c->id;
+			m.data.close.type = who;
 			ruyi_spmc_list_push(s_net_info.output_event_list, &m);
-			RUYI_LOG_INFO("<hostname:%s, service:%s, id:%u, type:%s> close by %s", _get_hostname_(c), c->service, c->id, _get_conntype_(c), who == RUYI_NET_CLOSE_SERVER ? "server" : "client");
+			RUYI_LOG_INFO("<hostname:%s, service:%s, id:%u, type:%s> read shutdown by %s", _get_hostname_(c), c->service, c->id, _get_conntype_(c), who == RUYI_NET_CLOSE_SERVER ? "server" : "client");
+	
+			if (!c->writable) {
+				m.ev = RUYI_NET_EVENT_CLOSE;
+				ruyi_spmc_list_push(s_net_info.output_event_list, &m);
+				RUYI_LOG_INFO("<hostname:%s, service:%s, id:%u, type:%s> close by %s", _get_hostname_(c), c->service, c->id, _get_conntype_(c), who == RUYI_NET_CLOSE_SERVER ? "server" : "client");
+			}
 		}
 	}
 	else {
-		ruyi_net_msg_t m;
-		m.ev = RUYI_NET_EVENT_WRITE_SHUTDOWN;
-		m.id = c->id;
-		m.data.close.type = who;
-		ruyi_spmc_list_push(s_net_info.output_event_list, &m);
-		RUYI_LOG_INFO("<hostname:%s, service:%s, id:%u, type:%s> write shutdown by %s", _get_hostname_(c), c->service, c->id, _get_conntype_(c), who == RUYI_NET_CLOSE_SERVER ? "server" : "client");
-
-		if (c->readable == false) {
-			m.ev = RUYI_NET_EVENT_CLOSE;
+		if (c->writable) {
+			ruyi_net_msg_t m;
+			m.ev = RUYI_NET_EVENT_WRITE_SHUTDOWN;
+			m.id = c->id;
+			m.data.close.type = who;
 			ruyi_spmc_list_push(s_net_info.output_event_list, &m);
-			RUYI_LOG_INFO("<hostname:%s, service:%s, id:%u, type:%s> close by %s", _get_hostname_(c), c->service, c->id, _get_conntype_(c), who == RUYI_NET_CLOSE_SERVER ? "server" : "client");
+			RUYI_LOG_INFO("<hostname:%s, service:%s, id:%u, type:%s> write shutdown by %s", _get_hostname_(c), c->service, c->id, _get_conntype_(c), who == RUYI_NET_CLOSE_SERVER ? "server" : "client");
+	
+			if (!c->readable) {
+				m.ev = RUYI_NET_EVENT_CLOSE;
+				ruyi_spmc_list_push(s_net_info.output_event_list, &m);
+				RUYI_LOG_INFO("<hostname:%s, service:%s, id:%u, type:%s> close by %s", _get_hostname_(c), c->service, c->id, _get_conntype_(c), who == RUYI_NET_CLOSE_SERVER ? "server" : "client");
+			}
 		}
 	}
 }
@@ -359,7 +371,6 @@ static inline void _net_cleanup_()
 		RUYI_MEM_FREE(&s_net_info.rb_pool[i]);
 	}
 	RUYI_MEM_FREE(&s_net_info.rb_pool);
-
 }
 
 static inline void _conn_gc_()
@@ -514,7 +525,7 @@ static inline void _conn_write_(ruyi_conn_t* c)
 			count++;
 			bytes += (n->len - n->offset);
 			n = nn;
-			nn = nn->next;
+			nn = nn == NULL ? NULL : nn->next;
 		}
 
 		ssize_t s = writev(c->fd, iov, count);
@@ -820,6 +831,10 @@ static inline int32_t _pending_events_dispatch_()
 		else {
 			ruyi_conn_t* c = _get_conn_(msg->id);
 			if (ruyi_unlikely(c->id != msg->id)) {
+				ruyi_net_msg_t m;
+				m.ev = RUYI_NET_EVENT_ID_ERROR;
+				m.id = msg->id;
+				ruyi_spmc_list_push(s_net_info.output_event_list, &m);
 				RUYI_LOG_ERROR("id on slot is %s, but received %s", c->id, msg->id);
 				goto PED_MSG_DATA_FREE;
 			}
@@ -838,7 +853,7 @@ static inline int32_t _pending_events_dispatch_()
 					_process_pending_write_event_(c, msg);
 					goto PED_MSG_FREE;
 				default:
-					RUYI_LOG_ERROR("id(%u) event type error: %d", c->id, msg->ev);
+					RUYI_LOG_ERROR("id:%u, event type error: %d", c->id, msg->ev);
 					goto PED_MSG_DATA_FREE;
 			}
 		}
@@ -869,7 +884,7 @@ static inline void _process_polling_error_event_(ruyi_conn_t* c)
 	}
 	else {
 		REPORT_ERROR(c, so_error);
-		RUYI_LOG_ERROR("<hostname:%s, service:%s, id:%u, type:%s> getsockopt SO_ERROR failed: %s", _get_hostname_(c), c->service, c->id, _get_conntype_(c), strerror(c->errcode));
+		RUYI_LOG_ERROR("<hostname:%s, service:%s, id:%u, type:%s> socket error occurred: %s", _get_hostname_(c), c->service, c->id, _get_conntype_(c), strerror(c->errcode));
 	}
 }
 
@@ -909,6 +924,7 @@ static inline void _process_polling_accept_event_(ruyi_conn_t* c)
 		}
 
 		ruyi_conn_t* new_c = _spawn_conn_();
+		new_c->fd = fd;
 		new_c->conn_type = RUYI_NET_CONN_PASSIVE;
 		new_c->conn_val = c->id;
 		memcpy(&new_c->addr, &addr, sizeof(addr));
@@ -929,6 +945,7 @@ static inline void _process_polling_accept_event_(ruyi_conn_t* c)
 		new_c->readable = true;
 		new_c->writable = true;
 		_polling_strategy_(new_c);
+		RUYI_LOG_INFO("<hostname:%s, service:%s, id:%u, type:%s> accept new connection", _get_hostname_(new_c), new_c->service, new_c->id, _get_conntype_(new_c), strerror(errno));
 
 		ruyi_net_msg_t msg;
 		msg.ev = RUYI_NET_EVENT_CONNECT_PASSIVE;
@@ -1114,6 +1131,7 @@ void* ruyi_net_event()
 
 void ruyi_net_listen(const char* hostname, const char* service, int32_t protocol)
 {
+	RUYI_RETURN_IF_MSG(atomic_load_explicit(&s_net_info.running, memory_order_relaxed) == false, "ruyi net is not running\n");
 	RUYI_RETURN_IF_MSG(service == NULL || !(protocol == IPPROTO_TCP || protocol == IPPROTO_UDP), "ruyi_net_listen(): params error\n");
 
 	ruyi_dns_t* dns = ruyi_dns_new(hostname, service, protocol, true);
@@ -1123,6 +1141,7 @@ void ruyi_net_listen(const char* hostname, const char* service, int32_t protocol
 
 void ruyi_net_connect(const char* hostname, const char* service, int32_t protocol)
 {
+	RUYI_RETURN_IF_MSG(atomic_load_explicit(&s_net_info.running, memory_order_relaxed) == false, "ruyi net is not running\n");
 	RUYI_RETURN_IF_MSG(service == NULL || !(protocol == IPPROTO_TCP || protocol == IPPROTO_UDP), "ruyi_net_connect(): params error\n");
 
 	ruyi_dns_t* dns = ruyi_dns_new(hostname, service, protocol, false);
@@ -1132,6 +1151,7 @@ void ruyi_net_connect(const char* hostname, const char* service, int32_t protoco
 
 void ruyi_net_dns_result(ruyi_dns_t* dns)
 {
+	RUYI_RETURN_IF_MSG(atomic_load_explicit(&s_net_info.running, memory_order_relaxed) == false, "ruyi net is not running\n");
 	RUYI_RETURN_IF_MSG(dns == NULL, "ruyi_net_dns_result(): params error\n");
 
 	ruyi_net_msg_t msg;
@@ -1143,17 +1163,21 @@ void ruyi_net_dns_result(ruyi_dns_t* dns)
 
 ruyi_net_msg_t* ruyi_net_get_msg()
 {
+	RUYI_RETURN_VAL_IF_MSG(atomic_load_explicit(&s_net_info.running, memory_order_relaxed) == false, NULL, "ruyi net is not running\n");
 	return ruyi_spmc_list_pop(s_net_info.output_event_list);
 }
 
 void ruyi_net_destroy_msg(ruyi_net_msg_t** msg)
 {
+	RUYI_RETURN_IF_MSG(atomic_load_explicit(&s_net_info.running, memory_order_relaxed) == false, "ruyi net is not running\n");
 	_output_free_(*msg);
+	RUYI_MEM_FREE(msg);
 	*msg = NULL;
 }
 
 void ruyi_net_send(uint32_t id, char* str, size_t len, write_str_free_t free_func)
 {
+	RUYI_RETURN_IF_MSG(atomic_load_explicit(&s_net_info.running, memory_order_relaxed) == false, "ruyi net is not running\n");
 	RUYI_RETURN_IF_MSG(str == NULL || free_func == NULL || len > RUYI_NET_PACK_MAX_SIZE, "ruyi_net_send(): params error\n");
 
 	ruyi_net_msg_t msg;
@@ -1168,7 +1192,8 @@ void ruyi_net_send(uint32_t id, char* str, size_t len, write_str_free_t free_fun
 
 void ruyi_net_close(uint32_t id, int32_t how)
 {
-	RUYI_RETURN_IF_MSG(how == SHUT_RD || how == SHUT_WR || how == SHUT_RDWR, "ruyi_net_close(): params error\n");
+	RUYI_RETURN_IF_MSG(atomic_load_explicit(&s_net_info.running, memory_order_relaxed) == false, "ruyi net is not running\n");
+	RUYI_RETURN_IF_MSG(!(how == SHUT_RD || how == SHUT_WR || how == SHUT_RDWR), "ruyi_net_close(): params error\n");
 
 	ruyi_net_msg_t msg;
 	msg.id = id;

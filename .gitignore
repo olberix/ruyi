@@ -1,8 +1,13 @@
 .vscode
 test*
 a.out
-CMakeLists.txt
 build*
 main.c
 bb.sh
 ruyi_list*
+debug
+release
+a.txt*
+*client
+*server
+.ruyi
