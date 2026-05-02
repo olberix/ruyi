@@ -138,8 +138,9 @@ ruyi_dns_t* ruyi_dns_new(const char* hostname, const char* service, int32_t prot
 	return dns;
 }
 
-void ruyi_dns_destroy(ruyi_dns_t* dns)
+void ruyi_dns_destroy(ruyi_dns_t** pdns)
 {
+	ruyi_dns_t* dns = *pdns;
 	if (dns->hostname) {
 		RUYI_MEM_FREE(&dns->hostname);
 	}
@@ -149,5 +150,6 @@ void ruyi_dns_destroy(ruyi_dns_t* dns)
 	if (dns->ai) {
 		freeaddrinfo(dns->ai);
 	}
-	RUYI_MEM_FREE(&dns);
+	
+	RUYI_MEM_FREE(pdns);
 }

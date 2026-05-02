@@ -18,7 +18,7 @@ typedef struct {
 } ruyi_dns_t;
 
 ruyi_dns_t* ruyi_dns_new(const char*, const char*, int32_t, bool);
-void ruyi_dns_destroy(ruyi_dns_t*);
+void ruyi_dns_destroy(ruyi_dns_t**);
 
 void ruyi_dns_init(); /* mt_unsafe */
 void* ruyi_dns_event(); /* mt_unsafe */

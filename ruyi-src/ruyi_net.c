@@ -261,8 +261,10 @@ static void _input_free_(void* pi)
 	}
 
 	if (m->ev == RUYI_NET_EVENT_DNS_RESULT) {
-		RUYI_MEM_FREE(&m->data.dns_result.dns->hostname);
-		RUYI_MEM_FREE(&m->data.dns_result.dns->service);
+		if (m->data.dns_result.dns) {
+			RUYI_MEM_FREE(&m->data.dns_result.dns->hostname);
+			RUYI_MEM_FREE(&m->data.dns_result.dns->service);
+		}
 	}
 	else if (m->ev == RUYI_NET_EVENT_WRITE) {
 		m->data.write.free_func(m->data.write.wstr);
@@ -356,8 +358,6 @@ static inline void _send_close_(ruyi_conn_t* c, int32_t what, RUYI_NET_CLOSE_T w
 
 static inline void _net_cleanup_()
 {
-	ruyi_poll_close(s_net_info.poll_fd);
-
 	struct timespec ts = {.tv_sec = 0, .tv_nsec = 500000000}; /* 500ms */
 	nanosleep(&ts, NULL);
 	ruyi_mpsc_list_destroy(&s_net_info.input_event_list, _input_free_);
@@ -366,6 +366,7 @@ static inline void _net_cleanup_()
 	for (uint32_t i = 0; i < RUYI_NET_MAX_SOCKETS; i++) {
 		_clear_conn_(s_net_info.conns + i);
 	}
+	ruyi_poll_close(s_net_info.poll_fd);
 
 	for (uint32_t i = 0; i < s_net_info.rb_top; i++) {
 		RUYI_MEM_FREE(&s_net_info.rb_pool[i]);
@@ -376,7 +377,7 @@ static inline void _net_cleanup_()
 static inline void _conn_gc_()
 {
 	ruyi_conn_t* c = s_net_info.conns + s_net_info.conns_gc_idx;
-	s_net_info.conns_gc_idx = (s_net_info.conns_gc_idx + 1) & RUYI_NET_MAX_SOCKETS;
+	s_net_info.conns_gc_idx = (s_net_info.conns_gc_idx + 1) & (RUYI_NET_MAX_SOCKETS - 1);
 	RUYI_RETURN_IF(_is_cleared_(c));
 	
 	if (c->errcode == 0) {
@@ -451,8 +452,8 @@ static inline void _process_pending_read_shutdown_event_(ruyi_conn_t* c)
 {
 	RUYI_RETURN_IFUL(c->readable == false);
 	
-	c->readable = false;
 	_send_close_(c, SHUT_RD, RUYI_NET_CLOSE_SERVER);
+	c->readable = false;
 
 	shutdown(c->fd, SHUT_RD);
 	_polling_strategy_(c);
@@ -462,8 +463,8 @@ static inline void _process_pending_write_shutdown_event_(ruyi_conn_t* c)
 {
 	RUYI_RETURN_IFUL(c->writable == false);
 	
-	c->writable = false;
 	_send_close_(c, SHUT_WR, RUYI_NET_CLOSE_SERVER);
+	c->writable = false;
 	
 	if (c->write_list_head == NULL) {
 		shutdown(c->fd, SHUT_WR);
@@ -488,16 +489,15 @@ static inline void _process_pending_write_event_(ruyi_conn_t* c, ruyi_net_msg_t*
 	node_pre->len = sizeof(uint32_t);
 	node_pre->offset = 0;
 	node_pre->free_func = NULL;
-	node_pre->next = NULL;
 
 	if (c->write_list_head == NULL) {
 		c->write_list_head = node_pre;
-		c->write_list_tail = node_pre;
 	}
 	else {
 		c->write_list_tail->next = node_pre;
 	}
-	c->write_list_tail->next = node;
+	node_pre->next = node;
+	c->write_list_tail = node;
 
 	if (c->is_pollout == false) {
 		uint32_t s = _id_slot_(msg->id) - 1;
@@ -534,20 +534,21 @@ static inline void _conn_write_(ruyi_conn_t* c)
 				_polling_strategy_(c);
 			}
 			else if (errno == EPIPE) {
-				c->writable = false;
 				_send_close_(c, SHUT_WR, RUYI_NET_CLOSE_CLIENT);
+				c->writable = false;
 				while (c->write_list_head != NULL) {
 					write_node_t* tmp = c->write_list_head;
 					c->write_list_head = tmp->next;
 					if (tmp->free_func) {
 						tmp->free_func(tmp->wstr);
 					}
+					RUYI_MEM_FREE(&tmp);
 				}
+				c->write_list_tail = NULL;
 			}
 			else {
 				REPORT_ERROR(c, errno);
 				RUYI_LOG_ERROR("<hostname:%s, service:%s, id:%u, type:%s> writev failed: %s", _get_hostname_(c), c->service, c->id, _get_conntype_(c), strerror(c->errcode));
-
 			}
 			break;
 		}
@@ -567,7 +568,7 @@ static inline void _conn_write_(ruyi_conn_t* c)
 				c->write_list_tail = NULL;
 			}
 			else {
-				c->write_list_head->offset = b;
+				c->write_list_head->offset += b;
 			}
 
 			if (s < bytes) {
@@ -706,7 +707,6 @@ static inline void _do_tcp_listen_(ruyi_dns_t* dns)
 		}
 		else {
 			close(listen_fd);
-			RUYI_LOG_ERROR("closing the listen socket causes no available connections");
 		}
 		break;
 	}
@@ -816,7 +816,7 @@ static inline void _process_pending_dns_event_(ruyi_net_msg_t* msg)
 		}
 	}
 
-	ruyi_dns_destroy(dns);
+	ruyi_dns_destroy(&msg->data.dns_result.dns);
 }
 
 static inline int32_t _pending_events_dispatch_()
@@ -924,22 +924,26 @@ static inline void _process_polling_accept_event_(ruyi_conn_t* c)
 		}
 
 		ruyi_conn_t* new_c = _spawn_conn_();
+		if (ruyi_unlikely(new_c == NULL)) {
+			close(fd);
+			break;
+		}
 		new_c->fd = fd;
 		new_c->conn_type = RUYI_NET_CONN_PASSIVE;
 		new_c->conn_val = c->id;
 		memcpy(&new_c->addr, &addr, sizeof(addr));
 		new_c->protocol = c->protocol;
 		new_c->socktype = c->socktype;
-		char* service = RUYI_MEM_ALLOC(3);
+		char* service = RUYI_MEM_ALLOC(8);
 		if (addr.ss_family == AF_INET) {
 			char* hostname = RUYI_MEM_ALLOC(16);
 			new_c->hostname = inet_ntop(AF_INET, &((const struct sockaddr_in*)&addr)->sin_addr, hostname, 16);
-			snprintf(service, 3, "%u", ntohs(((const struct sockaddr_in*)&addr)->sin_port));
+			snprintf(service, 8, "%u", ntohs(((const struct sockaddr_in*)&addr)->sin_port));
 		}
 		else {
 			char* hostname = RUYI_MEM_ALLOC(46);
 			new_c->hostname = inet_ntop(AF_INET6, &((const struct sockaddr_in6*)&addr)->sin6_addr, hostname, 46);
-			snprintf(service, 3, "%u", ntohs(((const struct sockaddr_in6*)&addr)->sin6_port));
+			snprintf(service, 8, "%u", ntohs(((const struct sockaddr_in6*)&addr)->sin6_port));
 		}
 		new_c->service = service;
 		new_c->readable = true;
@@ -1012,14 +1016,15 @@ static inline void _process_polling_read_event_(ruyi_conn_t* c)
 				}
 				REPORT_ERROR(c, errno);
 				RUYI_LOG_ERROR("<hostname:%s, service:%s, id:%u, type:%s> read failed: %s", _get_hostname_(c), c->service, c->id, _get_conntype_(c), strerror(c->errcode));
-				return;
+				break;
 			}
 			else if (n == 0) {
-				c->readable = false;
 				_send_close_(c, SHUT_RD, RUYI_NET_CLOSE_CLIENT);
+				c->readable = false;
 				
 				shutdown(c->fd, SHUT_RD);
 				_polling_strategy_(c);
+				break;
 			}
 			else {
 				rn->read_len += n;

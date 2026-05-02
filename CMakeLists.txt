@@ -19,7 +19,7 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release")
 endif()
 
-set(CMAKE_C_FLAGS_DEBUG "-g -O0 -Wall -Wextra -fsanitize=address")
+set(CMAKE_C_FLAGS_DEBUG "-g -O0 -Wall -Wextra")
 set(CMAKE_C_FLAGS_RELEASE "-O2 -DNDEBUG -Wall -Wextra")
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
