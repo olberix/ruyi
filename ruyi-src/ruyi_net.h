@@ -92,6 +92,7 @@ void ruyi_net_connect(const char*, const char*, int32_t); /* mt-safe */
 void ruyi_net_send(uint32_t, char*, size_t, write_str_free_t); /* mt-safe */
 void ruyi_net_close(uint32_t, int32_t); /* mt-safe */
 void ruyi_net_dns_result(ruyi_dns_t*); /* mt-safe */
+void ruyi_net_set_timeout(uint64_t); /* mt-safe */
 //output
 ruyi_net_msg_t* ruyi_net_get_msg(); /* mt-safe */
 void ruyi_net_destroy_msg(ruyi_net_msg_t**); /* mt-safe */

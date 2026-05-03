@@ -24,14 +24,18 @@
 #define RUYI_NET_ID_VERSION_BITS (8)
 #define RUYI_NET_MAX_SOCKETS (1 << 16)
 #define RUYI_NET_BACKLOG (1024)
+#define RUYI_NET_IDLE_INTERVAL_NS (200000)
+#define RUYI_NET_DEFAULT_TIMEOUT_NS (10000000000)
 
 static_assert(RUYI_NET_PACK_MAX_SIZE >= 1, "RUYI_NET_PACK_MAX_SIZE error");
 static_assert(RUYI_NET_READ_RING_SIZE >= 4 && (RUYI_NET_READ_RING_SIZE & (RUYI_NET_READ_RING_SIZE - 1)) == 0, "RUYI_NET_READ_RING_SIZE error");
-static_assert(RUYI_NET_READ_BUFF_SIZE >= RUYI_NET_PACK_MAX_SIZE * 3, "RUYI_NET_READ_BUFF_SIZEv error");
+static_assert(RUYI_NET_READ_BUFF_SIZE >= RUYI_NET_PACK_MAX_SIZE * 3, "RUYI_NET_READ_BUFF_SIZE error");
 static_assert(RUYI_NET_READ_BUFF_INIT_CNT >= 1, "RUYI_NET_READ_BUFF_INIT_CNT error");
 static_assert(RUYI_NET_ID_SLOT_BITS + RUYI_NET_ID_VERSION_BITS == sizeof(uint32_t) * 8, "BITS error");
 static_assert(RUYI_NET_MAX_SOCKETS >= 1 && RUYI_NET_MAX_SOCKETS <= ((uint32_t)1 << RUYI_NET_ID_SLOT_BITS) && RUYI_NET_MAX_SOCKETS >= sizeof(uint64_t) && (RUYI_NET_MAX_SOCKETS & (RUYI_NET_MAX_SOCKETS - 1)) == 0, "RUYI_NET_MAX_SOCKETS error");
 static_assert(RUYI_NET_BACKLOG >= 1, "RUYI_NET_BACKLOG error");
+static_assert(RUYI_NET_IDLE_INTERVAL_NS >= 1 && RUYI_NET_IDLE_INTERVAL_NS <= 1000000000, "RUYI_NET_IDLE_INTERVAL_NS error");
+static_assert(RUYI_NET_DEFAULT_TIMEOUT_NS >= 10000000000, "RUYI_NET_DEFAULT_TIMEOUT_NS error");
 #define RUYI_NET_ID_VERSION_MASK ((1 << RUYI_NET_ID_VERSION_BITS) - 1)
 typedef struct ruyi_conn_t ruyi_conn_t;
 static void _polling_strategy_(ruyi_conn_t*);
@@ -54,6 +58,7 @@ typedef struct write_node_t {
 	write_str_free_t free_func;
 	struct write_node_t* next;
 } write_node_t;
+static_assert(sizeof(write_node_t) == 32, "write_node_t size error");
 
 typedef struct read_node_t {
 	_Alignas(RUYI_CACHELINE_SIZE) _Atomic uint32_t ref;
@@ -79,6 +84,7 @@ typedef struct ruyi_conn_t {
 	uint32_t conn_val;
 	bool tcp_connecting;
 
+	uint64_t idle_ns;
 	int32_t errcode;
 	bool readable;
 	bool writable;
@@ -94,7 +100,8 @@ typedef struct ruyi_conn_t {
 
 typedef struct ruyi_net_t {
 	_Alignas(RUYI_CACHELINE_SIZE) _Atomic bool running;
-	char padding[RUYI_CACHELINE_SIZE - sizeof(_Atomic bool)];
+	_Alignas(RUYI_CACHELINE_SIZE) _Atomic uint64_t timeout_ns;
+	char padding[RUYI_CACHELINE_SIZE - sizeof(_Atomic uint64_t)];
 
 	ruyi_mpsc_list_t* input_event_list;
 	ruyi_spmc_list_t* output_event_list;
@@ -114,6 +121,8 @@ typedef struct ruyi_net_t {
 	uint32_t rb_top;
 	uint32_t rb_sz;
 	char** rb_pool;
+
+	uint64_t net_time_ns;
 } ruyi_net_t;
 
 static ruyi_net_t s_net_info;
@@ -248,6 +257,8 @@ void ruyi_net_init()
 	}
 	s_net_info.rb_top = RUYI_NET_READ_BUFF_INIT_CNT;
 
+	s_net_info.timeout_ns = RUYI_NET_DEFAULT_TIMEOUT_NS;
+
 	signal(SIGPIPE, SIG_IGN);
 
 	atomic_store_explicit(&s_net_info.running, true, memory_order_release);
@@ -329,12 +340,12 @@ static inline void _send_close_(ruyi_conn_t* c, int32_t what, RUYI_NET_CLOSE_T w
 			m.id = c->id;
 			m.data.close.type = who;
 			ruyi_spmc_list_push(s_net_info.output_event_list, &m);
-			RUYI_LOG_INFO("<hostname:%s, service:%s, id:%u, type:%s> read shutdown by %s", _get_hostname_(c), c->service, c->id, _get_conntype_(c), who == RUYI_NET_CLOSE_SERVER ? "server" : "client");
+			RUYI_LOG_INFO("<hostname:%s, service:%s, id:%u, type:%s> read shutdown by %s", _get_hostname_(c), c->service, c->id, _get_conntype_(c), who == RUYI_NET_CLOSE_SERVER ? "myself" : "peer");
 	
 			if (!c->writable) {
 				m.ev = RUYI_NET_EVENT_CLOSE;
 				ruyi_spmc_list_push(s_net_info.output_event_list, &m);
-				RUYI_LOG_INFO("<hostname:%s, service:%s, id:%u, type:%s> close by %s", _get_hostname_(c), c->service, c->id, _get_conntype_(c), who == RUYI_NET_CLOSE_SERVER ? "server" : "client");
+				RUYI_LOG_INFO("<hostname:%s, service:%s, id:%u, type:%s> close by %s", _get_hostname_(c), c->service, c->id, _get_conntype_(c), who == RUYI_NET_CLOSE_SERVER ? "myself" : "peer");
 			}
 		}
 	}
@@ -345,12 +356,12 @@ static inline void _send_close_(ruyi_conn_t* c, int32_t what, RUYI_NET_CLOSE_T w
 			m.id = c->id;
 			m.data.close.type = who;
 			ruyi_spmc_list_push(s_net_info.output_event_list, &m);
-			RUYI_LOG_INFO("<hostname:%s, service:%s, id:%u, type:%s> write shutdown by %s", _get_hostname_(c), c->service, c->id, _get_conntype_(c), who == RUYI_NET_CLOSE_SERVER ? "server" : "client");
+			RUYI_LOG_INFO("<hostname:%s, service:%s, id:%u, type:%s> write shutdown by %s", _get_hostname_(c), c->service, c->id, _get_conntype_(c), who == RUYI_NET_CLOSE_SERVER ? "myself" : "peer");
 	
 			if (!c->readable) {
 				m.ev = RUYI_NET_EVENT_CLOSE;
 				ruyi_spmc_list_push(s_net_info.output_event_list, &m);
-				RUYI_LOG_INFO("<hostname:%s, service:%s, id:%u, type:%s> close by %s", _get_hostname_(c), c->service, c->id, _get_conntype_(c), who == RUYI_NET_CLOSE_SERVER ? "server" : "client");
+				RUYI_LOG_INFO("<hostname:%s, service:%s, id:%u, type:%s> close by %s", _get_hostname_(c), c->service, c->id, _get_conntype_(c), who == RUYI_NET_CLOSE_SERVER ? "myself" : "peer");
 			}
 		}
 	}
@@ -381,6 +392,10 @@ static inline void _conn_gc_()
 	RUYI_RETURN_IF(_is_cleared_(c));
 	
 	if (c->errcode == 0) {
+		if (c->conn_type != RUYI_NET_CONN_LISTEN && c->idle_ns + s_net_info.timeout_ns <= s_net_info.net_time_ns) {
+			REPORT_ERROR(c, ETIMEDOUT);
+			return;
+		}
 		RUYI_RETURN_IF(c->readable || c->writable || c->write_list_head != NULL);
 	}
 	for (uint32_t j = 0; j < RUYI_NET_READ_RING_SIZE; j++) {
@@ -822,7 +837,7 @@ static inline void _process_pending_dns_event_(ruyi_net_msg_t* msg)
 static inline int32_t _pending_events_dispatch_()
 {
 	int32_t num = 0;
-	ruyi_net_msg_t* msg = NULL;
+	ruyi_net_msg_t* msg;
 	while ((msg = ruyi_mpsc_list_pop(s_net_info.input_event_list)) != NULL) {
 		num++;
 		if (ruyi_unlikely(msg->ev == RUYI_NET_EVENT_DNS_RESULT)) {
@@ -835,13 +850,14 @@ static inline int32_t _pending_events_dispatch_()
 				m.ev = RUYI_NET_EVENT_ID_ERROR;
 				m.id = msg->id;
 				ruyi_spmc_list_push(s_net_info.output_event_list, &m);
-				RUYI_LOG_ERROR("id on slot is %s, but received %s", c->id, msg->id);
+				RUYI_LOG_ERROR("id on slot is %u, but received: %u", c->id, msg->id);
 				goto PED_MSG_DATA_FREE;
 			}
 			if (ruyi_unlikely(c->errcode != 0)) {
-				RUYI_LOG_ERROR("the socket for id(%u) has already encountered an error: %s", c->id, strerror(c->errcode));
+				RUYI_LOG_ERROR("the socket for id: %u has already encountered an error: %s", c->id, strerror(c->errcode));
 				goto PED_MSG_DATA_FREE;
 			}
+			c->idle_ns = s_net_info.net_time_ns;
 			switch (msg->ev) {
 				case RUYI_NET_EVENT_READ_SHUTDOWN:
 					_process_pending_read_shutdown_event_(c);
@@ -853,7 +869,7 @@ static inline int32_t _pending_events_dispatch_()
 					_process_pending_write_event_(c, msg);
 					goto PED_MSG_FREE;
 				default:
-					RUYI_LOG_ERROR("id:%u, event type error: %d", c->id, msg->ev);
+					RUYI_LOG_ERROR("id: %u, event type error: %d", c->id, msg->ev);
 					goto PED_MSG_DATA_FREE;
 			}
 		}
@@ -1086,6 +1102,7 @@ static inline int32_t _polling_events_dispatch_()
 		if (ruyi_unlikely(c->errcode != 0)) {
 			continue;
 		}
+		c->idle_ns = s_net_info.net_time_ns;
 		if (ruyi_unlikely(ruyi_poll_event_error(event) == true)) {
 			_process_polling_error_event_(c);
 			continue;
@@ -1105,6 +1122,7 @@ static inline int32_t _polling_events_dispatch_()
 void* ruyi_net_event()
 {
 	while (atomic_load_explicit(&s_net_info.running, memory_order_relaxed)) {
+		s_net_info.net_time_ns += RUYI_NET_IDLE_INTERVAL_NS;
 		_conn_gc_();
 
 		int32_t num = 0;
@@ -1112,7 +1130,7 @@ void* ruyi_net_event()
 		num += _polling_events_dispatch_();
 
 		if (num <= 0) {
-			static struct timespec ts = {.tv_sec = 0, .tv_nsec = 200000}; /* 200us */
+			static struct timespec ts = {.tv_sec = 0, .tv_nsec = RUYI_NET_IDLE_INTERVAL_NS};
 			nanosleep(&ts, NULL);
 		}
 	}
@@ -1166,6 +1184,14 @@ void ruyi_net_dns_result(ruyi_dns_t* dns)
 	ruyi_mpsc_list_push(s_net_info.input_event_list, &msg);
 }
 
+void ruyi_net_set_timeout(uint64_t sec)
+{
+	RUYI_RETURN_IF_MSG(atomic_load_explicit(&s_net_info.running, memory_order_relaxed) == false, "ruyi net is not running\n");
+	RUYI_RETURN_IF_MSG(sec == 0, "ruyi_net_set_timeout(): params error\n");
+
+	atomic_store_explicit(&s_net_info.timeout_ns, sec * 1000000000, memory_order_relaxed);
+}
+
 ruyi_net_msg_t* ruyi_net_get_msg()
 {
 	RUYI_RETURN_VAL_IF_MSG(atomic_load_explicit(&s_net_info.running, memory_order_relaxed) == false, NULL, "ruyi net is not running\n");
@@ -1183,7 +1209,7 @@ void ruyi_net_destroy_msg(ruyi_net_msg_t** msg)
 void ruyi_net_send(uint32_t id, char* str, size_t len, write_str_free_t free_func)
 {
 	RUYI_RETURN_IF_MSG(atomic_load_explicit(&s_net_info.running, memory_order_relaxed) == false, "ruyi net is not running\n");
-	RUYI_RETURN_IF_MSG(str == NULL || free_func == NULL || len > RUYI_NET_PACK_MAX_SIZE, "ruyi_net_send(): params error\n");
+	RUYI_RETURN_IF_MSG(str == NULL || free_func == NULL || len > RUYI_NET_PACK_MAX_SIZE || len == 0, "ruyi_net_send(): params error\n");
 
 	ruyi_net_msg_t msg;
 	msg.ev = RUYI_NET_EVENT_WRITE;

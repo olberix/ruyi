@@ -57,7 +57,6 @@ void ruyi_log_init()
 	RUYI_EXIT_IF_MSG(s_log_info.fd_err < 0, "_log_init_(): open %s failed: %s\n", pathname, strerror(errno));
 
 	s_log_info.msg_list = ruyi_spsc_list_create(sizeof(ruyi_log_msg_t));
-	memset(s_log_info.log_count, 0, sizeof(s_log_info.log_count));
 
 	atomic_store_explicit(&s_log_info.running, true, memory_order_release);
 }

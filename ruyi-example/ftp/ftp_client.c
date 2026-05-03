@@ -5,6 +5,7 @@
 
 #include <unistd.h>
 #include <sys/stat.h>
+#include <time.h>
 
 void free_send_str(void* str)
 {
@@ -45,17 +46,14 @@ int main()
 	while (true) {
 		int32_t times = 1 + rand() % 10;
 		while (fp != NULL && --times >= 0) {
-			int32_t len = 1 + rand() % 50;
+			int32_t len = 1 + rand() % (64 * 1024);
 			char* str = RUYI_MEM_ALLOC(len);
 			size_t n = fread(str, 1, len, fp);
 			if (n > 0) {
 				ruyi_net_send(conn_id, str, n, free_send_str);
-				printf("%.*s\n", len, str);
-				sleep(1);
 			}
 			else if (n == 0) {
-				fclose(fp);
-				fp = NULL;
+				break;
 			}
 			else {
 				fclose(fp);
@@ -79,10 +77,20 @@ int main()
 		if (tn1 == tn2) {
 			MD5_Final(&ctx, md5str2);
 			ruyi_net_close(conn_id, SHUT_RDWR);
-			fclose(fp);
 			break;
 		}
+
+		static uint32_t timess[6] = {0, 5000, 50000, 100000, 1000000, 2000000};
+		int32_t idx = rand() % 6;
+		time_t s = timess[idx] / 1000000;
+		struct timespec ts = {
+			.tv_sec = s,
+			.tv_nsec = (timess[idx] - s * 1000000) * 1000
+		};
+		nanosleep(&ts, NULL);
 	}
+
+	fclose(fp);
 
 	printf("1: %s\n", md5str1);
 	printf("2: %s\n", md5str2);
