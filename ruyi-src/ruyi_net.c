@@ -84,7 +84,7 @@ typedef struct ruyi_conn_t {
 	uint32_t conn_val;
 	bool tcp_connecting;
 
-	uint64_t idle_ns;
+	uint64_t last_run_ns;
 	int32_t errcode;
 	bool readable;
 	bool writable;
@@ -392,7 +392,7 @@ static inline void _conn_gc_()
 	RUYI_RETURN_IF(_is_cleared_(c));
 	
 	if (c->errcode == 0) {
-		if (c->conn_type != RUYI_NET_CONN_LISTEN && c->idle_ns + s_net_info.timeout_ns <= s_net_info.net_time_ns) {
+		if (c->conn_type != RUYI_NET_CONN_LISTEN && c->last_run_ns + s_net_info.timeout_ns <= s_net_info.net_time_ns) {
 			REPORT_ERROR(c, ETIMEDOUT);
 			return;
 		}
@@ -854,10 +854,10 @@ static inline int32_t _pending_events_dispatch_()
 				goto PED_MSG_DATA_FREE;
 			}
 			if (ruyi_unlikely(c->errcode != 0)) {
-				RUYI_LOG_ERROR("the socket for id: %u has already encountered an error: %s", c->id, strerror(c->errcode));
+				RUYI_LOG_ERROR("the socket for id:%u has already encountered an error: %s", c->id, strerror(c->errcode));
 				goto PED_MSG_DATA_FREE;
 			}
-			c->idle_ns = s_net_info.net_time_ns;
+			c->last_run_ns = s_net_info.net_time_ns;
 			switch (msg->ev) {
 				case RUYI_NET_EVENT_READ_SHUTDOWN:
 					_process_pending_read_shutdown_event_(c);
@@ -869,7 +869,7 @@ static inline int32_t _pending_events_dispatch_()
 					_process_pending_write_event_(c, msg);
 					goto PED_MSG_FREE;
 				default:
-					RUYI_LOG_ERROR("id: %u, event type error: %d", c->id, msg->ev);
+					RUYI_LOG_ERROR("id:%u, event type error:%d", c->id, msg->ev);
 					goto PED_MSG_DATA_FREE;
 			}
 		}
@@ -945,6 +945,7 @@ static inline void _process_polling_accept_event_(ruyi_conn_t* c)
 			break;
 		}
 		new_c->fd = fd;
+		new_c->last_run_ns = s_net_info.net_time_ns;
 		new_c->conn_type = RUYI_NET_CONN_PASSIVE;
 		new_c->conn_val = c->id;
 		memcpy(&new_c->addr, &addr, sizeof(addr));
@@ -1102,7 +1103,7 @@ static inline int32_t _polling_events_dispatch_()
 		if (ruyi_unlikely(c->errcode != 0)) {
 			continue;
 		}
-		c->idle_ns = s_net_info.net_time_ns;
+		c->last_run_ns = s_net_info.net_time_ns;
 		if (ruyi_unlikely(ruyi_poll_event_error(event) == true)) {
 			_process_polling_error_event_(c);
 			continue;
@@ -1122,7 +1123,6 @@ static inline int32_t _polling_events_dispatch_()
 void* ruyi_net_event()
 {
 	while (atomic_load_explicit(&s_net_info.running, memory_order_relaxed)) {
-		s_net_info.net_time_ns += RUYI_NET_IDLE_INTERVAL_NS;
 		_conn_gc_();
 
 		int32_t num = 0;
@@ -1130,6 +1130,7 @@ void* ruyi_net_event()
 		num += _polling_events_dispatch_();
 
 		if (num <= 0) {
+			s_net_info.net_time_ns += RUYI_NET_IDLE_INTERVAL_NS;
 			static struct timespec ts = {.tv_sec = 0, .tv_nsec = RUYI_NET_IDLE_INTERVAL_NS};
 			nanosleep(&ts, NULL);
 		}

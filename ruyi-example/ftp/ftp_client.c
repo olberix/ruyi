@@ -20,8 +20,8 @@ int main()
 	char md5str2[33];
 	file_md5("a.txt", md5str1);
 
-	char* host = "127.0.0.1";
-	char* port = "16888";
+	char* host = "127.0.0.7";
+	char* port = "20619";
 	ruyi_net_connect(host, port, IPPROTO_TCP);
 	uint32_t conn_id;
 

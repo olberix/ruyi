@@ -14,8 +14,8 @@ int main()
 {
 	ruyi_start();
 	
-	char* host = "127.0.0.1";
-	char* port = "16888";
+	char* host = NULL;
+	char* port = "20619";
 	ruyi_net_listen(host, port, IPPROTO_TCP);
 
 	ruyi_net_msg_t* msg;
