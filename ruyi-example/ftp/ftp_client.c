@@ -80,14 +80,14 @@ int main()
 			break;
 		}
 
-		static uint32_t timess[6] = {0, 5000, 50000, 100000, 1000000, 2000000};
-		int32_t idx = rand() % 6;
-		time_t s = timess[idx] / 1000000;
-		struct timespec ts = {
-			.tv_sec = s,
-			.tv_nsec = (timess[idx] - s * 1000000) * 1000
-		};
-		nanosleep(&ts, NULL);
+		// static uint32_t timess[6] = {0, 5000, 50000, 100000, 1000000, 2000000};
+		// int32_t idx = rand() % 6;
+		// time_t s = timess[idx] / 1000000;
+		// struct timespec ts = {
+		// 	.tv_sec = s,
+		// 	.tv_nsec = (timess[idx] - s * 1000000) * 1000
+		// };
+		// nanosleep(&ts, NULL);
 	}
 
 	fclose(fp);

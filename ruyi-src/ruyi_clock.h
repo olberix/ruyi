@@ -24,6 +24,13 @@ static inline uint64_t ruyi_clock_time_ms()
 	return ((uint64_t)ts.tv_sec * 1000000000 + ts.tv_nsec) / 1000000;
 }
 
+static inline uint64_t ruyi_clock_time_ns()
+{
+	struct timespec ts = ruyi_clock_time_ts();
+
+	return ((uint64_t)ts.tv_sec * 1000000000 + ts.tv_nsec);
+}
+
 /* Output format: "YYYY-MM-DD HH:MM:SS.mmm" */
 static inline void ruyi_clock_time_format(char* buf, size_t len, const struct timespec* pts)
 {
