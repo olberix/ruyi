@@ -1,7 +1,6 @@
 .vscode
 test*
 a.out
-build*
 main.c
 bb.sh
 ruyi_list*

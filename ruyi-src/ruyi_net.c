@@ -636,15 +636,6 @@ static inline void _do_tcp_listen_(ruyi_dns_t* dns)
 			}
 		#endif
 
-		#ifdef SO_KEEPALIVE
-			int32_t keepalive = 1;
-			if (ruyi_unlikely(setsockopt(listen_fd, SOL_SOCKET, SO_KEEPALIVE, &keepalive, sizeof(keepalive)) < 0)) {
-				RUYI_LOG_ERROR("listen socket setsockopt SO_KEEPALIVE failed: %s", strerror(errno));
-				close(listen_fd);
-				continue;
-			}
-		#endif
-
 		if (ai->ai_family == AF_INET6) {
 			#ifdef IPV6_V6ONLY
 				int32_t v6only = 1;
@@ -761,14 +752,6 @@ static inline void _do_tcp_connect_(ruyi_conn_t* c)
 			RUYI_LOG_ERROR("create connection socket failed: %s", strerror(errno));
 			continue;
 		}
-
-		#ifdef SO_KEEPALIVE
-			int32_t keepalive = 1;
-			if (ruyi_unlikely(setsockopt(c->fd, SOL_SOCKET, SO_KEEPALIVE, &keepalive, sizeof(keepalive)) < 0)) {
-				RUYI_LOG_ERROR("connection socket setsockopt SO_KEEPALIVE failed: %s", strerror(errno));
-				continue;
-			}
-		#endif
 
 		if (c->ai_cur->ai_protocol == IPPROTO_TCP) {
 			#ifdef TCP_NODELAY

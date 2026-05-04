@@ -20,20 +20,15 @@ int main()
 
 	ruyi_net_msg_t* msg;
 	while (true) {
-		// static uint32_t timess[6] = {0, 5000, 50000, 100000, 1000000, 2000000};
-		// int32_t idx = rand() % 6;
-		// time_t s = timess[idx] / 1000000;
-		// struct timespec ts = {
-		// 	.tv_sec = s,
-		// 	.tv_nsec = (timess[idx] - s * 1000000) * 1000
-		// };
-		// nanosleep(&ts, NULL);
-		
 		msg = ruyi_net_get_msg();
 		if (msg && msg->ev == RUYI_NET_EVENT_READ) {
 			char* str = RUYI_MEM_ALLOC(msg->data.read.len);
 			memcpy(str, msg->data.read.rstr, msg->data.read.len);
 			ruyi_net_send(msg->id, str, msg->data.read.len, free_send_str);
+		}
+		if (msg == NULL) {
+			static struct timespec ts = {.tv_sec = 0, .tv_nsec = 16000000};
+			nanosleep(&ts, NULL);
 		}
 		ruyi_net_destroy_msg(&msg);
 	}
