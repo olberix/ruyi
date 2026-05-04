@@ -16,9 +16,10 @@ int main()
 {
 	ruyi_start();
 
+	const char* filename = "2.mp4";
 	char md5str1[33];
 	char md5str2[33];
-	file_md5("a.txt", md5str1);
+	file_md5(filename, md5str1);
 
 	char* host = "127.0.0.7";
 	char* port = "20619";
@@ -36,16 +37,17 @@ int main()
 		ruyi_net_destroy_msg(&msg);
 	}
 
-    FILE* fp = fopen("a.txt", "rb");
+    FILE* fp = fopen(filename, "rb");
 	MD5_CTX ctx;
     MD5_Init(&ctx);
 	size_t tn1 = 0, tn2 = 0;
 	struct stat st;
-	stat("a.txt", &st);
+	stat(filename, &st);
 	tn1 = st.st_size;
+	int32_t p = 10;
 	while (true) {
 		int32_t times = 1 + rand() % 10;
-		while (fp != NULL && --times >= 0) {
+		while (ftell(fp) != (ssize_t)tn1 && --times >= 0) {
 			int32_t len = 1 + rand() % (64 * 1024);
 			char* str = RUYI_MEM_ALLOC(len);
 			size_t n = fread(str, 1, len, fp);
@@ -68,9 +70,12 @@ int main()
 				break;
 			}
 			if (msg->id == conn_id && msg->ev == RUYI_NET_EVENT_READ) {
-				printf("%.*s\n", msg->data.read.len, msg->data.read.rstr);
 				MD5_Update(&ctx, (const uint8_t*)msg->data.read.rstr, msg->data.read.len);
 				tn2 += msg->data.read.len;
+				if (tn2 * p >= tn1) {
+					printf("--------------------%d%%\n", (11 - p) * 10);
+					p--;
+				}
 			}
 			ruyi_net_destroy_msg(&msg);
 		}
