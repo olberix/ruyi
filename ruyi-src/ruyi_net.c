@@ -49,6 +49,7 @@ typedef enum RUYI_NET_CONN_T {
 	RUYI_NET_CONN_PASSIVE = 0,
 	RUYI_NET_CONN_ACTIVE,
 	RUYI_NET_CONN_LISTEN,
+	RUYI_NET_CONN_MAX,
 } RUYI_NET_CONN_T;
 
 typedef struct write_node_t {
@@ -139,28 +140,20 @@ static inline uint32_t _id_version_(uint32_t id)
 
 static inline const char* _get_hostname_(ruyi_conn_t* c)
 {
-	if (c->hostname) {
+	if (ruyi_likely(c->hostname != NULL)) {
 		return c->hostname;
 	}
 	if (c->addr.ss_family == AF_INET) {
 		return "0.0.0.0";
 	}
-	else {
-		return "::";
-	}
+	return "::";
 }
 
 static inline const char* _get_conntype_(ruyi_conn_t* c)
 {
-	if (c->conn_type == RUYI_NET_CONN_LISTEN) {
-		return "listen";
-	}
-	else if (c->conn_type == RUYI_NET_CONN_ACTIVE) {
-		return "active";
-	}
-	else {
-		return "passive";
-	}
+	static const char* conn_type_str[RUYI_NET_CONN_MAX] = {"passive", "active", "listen"};
+
+	return conn_type_str[c->conn_type];
 }
 
 static inline bool _is_cleared_(ruyi_conn_t* c)
@@ -238,6 +231,9 @@ void ruyi_net_init()
 {
 	memset(&s_net_info, 0, sizeof(s_net_info));
 
+	s_net_info.poll_fd = ruyi_poll_create();
+	RUYI_EXIT_IF_MSG(s_net_info.poll_fd < 0, "ruyi_net_init(): poll create failed: %s\n", strerror(errno));
+
 	s_net_info.input_event_list = ruyi_mpsc_list_create(sizeof(ruyi_net_msg_t));
 	s_net_info.output_event_list = ruyi_spmc_list_create(sizeof(ruyi_net_msg_t));
 
@@ -246,9 +242,6 @@ void ruyi_net_init()
 		s_net_info.slot_pool[idx] = idx + 1;
 	}
 	s_net_info.sp_top = RUYI_NET_MAX_SOCKETS;
-
-	s_net_info.poll_fd = ruyi_poll_create();
-	RUYI_EXIT_IF_MSG(s_net_info.poll_fd < 0, "ruyi_net_init(): poll create failed: %s\n", strerror(errno));
 
 	s_net_info.rb_sz = RUYI_NET_READ_BUFF_INIT_CNT;
 	s_net_info.rb_pool = RUYI_MEM_ALLOC(sizeof(char*) * s_net_info.rb_sz);
@@ -912,14 +905,14 @@ static inline void _process_polling_accept_event_(ruyi_conn_t* c)
 			}
 			else {
 				RUYI_LOG_ERROR("<hostname:%s, service:%s, id:%u, type:%s> accept new connection failed: %s", _get_hostname_(c), c->service, c->id, _get_conntype_(c), strerror(errno));
-			}
-		}
-		else {
-			if (_set_nonblocking_(fd) < 0) {
-				RUYI_LOG_ERROR("accepted connection _set_nonblocking_ failed: %s", strerror(errno));
-				close(fd);
 				continue;
 			}
+		}
+		
+		if (_set_nonblocking_(fd) < 0) {
+			RUYI_LOG_ERROR("accepted connection _set_nonblocking_ failed: %s", strerror(errno));
+			close(fd);
+			continue;
 		}
 
 		ruyi_conn_t* new_c = _spawn_conn_();
