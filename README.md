@@ -90,3 +90,11 @@ cd ruyi
 + UDP
 + 完善 IPv4 / IPv6 双栈
 + kqueue 实现，全面支持 BSD / macOS
+
+## License
+
+[MIT](https://github.com/olberix/ruyi/blob/main/LICENSE)
+
+---
+
+> **ruyi** 取名自`如意金箍棒`之`如意`，作为一个程序的核心功能，希望她能一直如意
