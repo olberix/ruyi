@@ -23,7 +23,7 @@
 
 	typedef struct {
 		_Alignas(RUYI_CACHELINE_SIZE) atomic_flag spinlock;
-		char padding[RUYI_CACHELINE_SIZE - sizeof(_Alignas(RUYI_CACHELINE_SIZE) atomic_flag)];
+		char padding[RUYI_CACHELINE_SIZE - sizeof(atomic_flag)];
 	} ruyi_spinlock_t;
 
 	static inline void ruyi_spin_init(ruyi_spinlock_t* lk)
