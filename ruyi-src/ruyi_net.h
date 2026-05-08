@@ -87,14 +87,14 @@ static_assert(_Alignof(ruyi_net_msg_t) == 32, "ruyi_net_msg_t align error");
 void ruyi_net_init(); /* mt-unsafe */
 
 //input
-void ruyi_net_listen(const char*, const char*, int32_t); /* mt-safe */
-void ruyi_net_connect(const char*, const char*, int32_t); /* mt-safe */
-void ruyi_net_send(uint32_t, char*, size_t, write_str_free_t); /* mt-safe */
-void ruyi_net_close(uint32_t, int32_t); /* mt-safe */
-void ruyi_net_dns_result(ruyi_dns_t*); /* mt-safe */
-void ruyi_net_set_timeout(uint64_t); /* mt-safe */
+void ruyi_net_listen(const char*, const char*, int32_t); /* mt-unsafe */
+void ruyi_net_connect(const char*, const char*, int32_t); /* mt-unsafe */
+void ruyi_net_send(uint32_t, char*, size_t, write_str_free_t); /* mt-unsafe */
+void ruyi_net_close(uint32_t, int32_t); /* mt-unsafe */
+void ruyi_net_dns_result(ruyi_dns_t*); /* mt-unsafe */
+void ruyi_net_set_timeout(uint64_t); /* mt-unsafe */
 //output
-ruyi_net_msg_t* ruyi_net_get_msg(); /* mt-safe */
+ruyi_net_msg_t* ruyi_net_get_msg(); /* mt-unsafe */
 void ruyi_net_destroy_msg(ruyi_net_msg_t**); /* mt-safe */
 
 void* ruyi_net_event(); /* mt-unsafe */
