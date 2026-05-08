@@ -12,11 +12,20 @@ void free_send_str(void* str)
 	RUYI_MEM_FREE(&str);
 }
 
-int main()
+int main(int argc, char *argv[])
 {
+	if (argc < 2) {
+		fprintf(stderr, "usage: %s <filename>\n", argv[0]);
+		exit(EXIT_FAILURE);
+	}
+	const char* filename = argv[1];
+	if (access(filename, F_OK) != 0) {
+		fprintf(stderr, "%s is not found\n", filename);
+		exit(EXIT_FAILURE);
+	}
+
 	ruyi_start();
 
-	const char* filename = "2.mp4";
 	char md5str1[33];
 	char md5str2[33];
 	file_md5(filename, md5str1);
