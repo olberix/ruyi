@@ -34,7 +34,7 @@
 	static inline void ruyi_spin_lock(ruyi_spinlock_t* lk)
 	{
 		while (atomic_flag_test_and_set_explicit(&lk->spinlock, memory_order_acquire)) {
-			// RUYI_CPU_PAUSE();
+			RUYI_CPU_PAUSE();
 		}
 	}
 

@@ -100,8 +100,10 @@ void* ruyi_dns_event()
 
 void ruyi_dns_notify_stop()
 {
-	atomic_store_explicit(&s_dns_info.running, false, memory_order_seq_cst);
-	ruyi_mutex_broadcast(&s_dns_info.mlock);
+	ruyi_mutex_lock(&s_dns_info.mlock);
+    atomic_store_explicit(&s_dns_info.running, false, memory_order_seq_cst);
+    ruyi_mutex_broadcast(&s_dns_info.mlock);
+    ruyi_mutex_unlock(&s_dns_info.mlock);
 }
 
 void ruyi_dns_request(ruyi_dns_t* dns)

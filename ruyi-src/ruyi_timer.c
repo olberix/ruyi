@@ -70,6 +70,7 @@ void ruyi_timer_init()
 static void _entry_free_(void* pe)
 {
 	timer_entry_t* entry = *((timer_entry_t**)pe);
+	entry->udf(entry->ud);
 	RUYI_MEM_FREE(&entry);
 }
 
@@ -86,8 +87,8 @@ static inline void _timer_cleanup_()
 
 	struct timespec ts = {.tv_sec = 0, .tv_nsec = 500000000}; /* 500ms */
 	nanosleep(&ts, NULL);
-	ruyi_mpsc_list_destroy(&s_timer_info.pending_cancel_list, _entry_free_);
-	ruyi_mpsc_list_destroy(&s_timer_info.pending_add_list, NULL);
+	ruyi_mpsc_list_destroy(&s_timer_info.pending_cancel_list, NULL);
+	ruyi_mpsc_list_destroy(&s_timer_info.pending_add_list, _entry_free_);
 }
 
 static inline uint64_t _hash_(uint64_t id)
@@ -103,6 +104,7 @@ static inline void _add_cancel_id_(uint64_t id)
 		s_timer_info.cs_sz = (old_sz << 1);
 		s_timer_info.cs_len = 0;
 		s_timer_info.cancel_set = RUYI_MEM_ALLOC(s_timer_info.cs_sz * sizeof(cancel_set_t));
+		memset(s_timer_info.cancel_set, 0, s_timer_info.cs_sz * sizeof(cancel_set_t));
 		for (size_t i = 0; i < old_sz; i++) {
 			if (old_set[i].id != 0) {
 				_add_cancel_id_(old_set[i].id);
@@ -240,7 +242,6 @@ void* ruyi_timer_event()
 			if (_test_and_erase_(entry->id) == false) {
 				entry->cb(entry->ud);
 			}
-			entry->udf(entry->ud);
 			_entry_free_(&entry);
 		} while (s_timer_info.teh_len != 0 && s_timer_info.timer_entries[0]->ts_ms <= cur_ts);
 	}
